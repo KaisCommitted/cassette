@@ -934,12 +934,15 @@ button {
  * Grain, fixed to the viewport so it reads as the projection rather than the
  * content. Kept faint: it should be felt, not seen.
  *
- * Static, and on a layer of its own. It used to drift three times a second,
- * which meant repainting a full-viewport layer on top of everything else
- * continuously — read as a flicker whenever the pointer moved, because this
- * app runs with DirectComposition disabled (that is what makes mpv's video
- * visible at all) and pays far more for full-window effects than a normal
- * Electron app would.
+ * Static. It used to drift three times a second, which meant repainting a
+ * full-viewport layer on top of everything else continuously — expensive here
+ * in particular, because this app runs with DirectComposition disabled (that
+ * is what makes mpv's video visible at all) and so pays more for full-window
+ * effects than a normal Electron app would.
+ *
+ * No `will-change` on it: nothing about it changes any more, and the hint only
+ * buys a permanently promoted compositing layer that then has to be blended
+ * over the whole window on every frame.
  */
 .shell::before {
   content: '';
@@ -949,8 +952,6 @@ button {
   z-index: 3;
   opacity: 0.035;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
-  will-change: transform;
-  transform: translateZ(0);
 }
 
 /* Falloff at the edges, the way a projected image dims off-centre. */
