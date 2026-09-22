@@ -79,3 +79,5 @@ export const keybindsFile = (): string => join(dataDir(), 'keybinds.json')
 
 export const metadataFile = (): string => join(dataDir(), 'metadata.json')
 export const artDir = (): string => join(cacheDir(), 'art')
+
+export const probeFile = (): string => join(dataDir(), 'probe.json')
