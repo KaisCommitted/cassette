@@ -1,6 +1,7 @@
 import type { Library, MediaFile, Settings } from '@shared/types'
 import { parseFilename } from '../library/parseFilename'
 import { findLocalSubtitles } from './localSubtitles'
+import { describeEmbedded, probeEmbeddedSubtitles } from './embeddedSubtitles'
 import { OpenSubtitlesClient } from './openSubtitles'
 
 export type ScanScope =
@@ -12,7 +13,7 @@ export type ScanScope =
 export interface ScanResultItem {
   key: string
   label: string
-  status: 'already-had-one' | 'downloaded' | 'nothing-found' | 'failed'
+  status: 'has-embedded' | 'already-had-one' | 'downloaded' | 'nothing-found' | 'failed'
   detail?: string
 }
 
@@ -78,6 +79,20 @@ export async function scanForSubtitles(
   for (const [index, target] of targets.entries()) {
     onProgress?.({ done: index, total: targets.length, current: target.label })
 
+    // Inside the container first. Most files already carry subtitles, and
+    // downloading for those would be both wrong and a waste of a quota that
+    // is only a handful of files a day.
+    const embedded = await probeEmbeddedSubtitles(target.file.path)
+    if (embedded.length > 0) {
+      results.push({
+        key: target.file.key,
+        label: target.label,
+        status: 'has-embedded',
+        detail: describeEmbedded(embedded)
+      })
+      continue
+    }
+
     const existing = await findLocalSubtitles(target.file.path)
     if (existing.length > 0) {
       results.push({
@@ -94,7 +109,7 @@ export async function scanForSubtitles(
         key: target.file.key,
         label: target.label,
         status: 'nothing-found',
-        detail: 'No subtitle file on disk, and no OpenSubtitles key is set'
+        detail: 'Nothing embedded, nothing on disk, and no OpenSubtitles key is set'
       })
       continue
     }

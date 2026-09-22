@@ -335,7 +335,7 @@ export type SubtitleScanScope =
 export interface SubtitleScanResult {
   key: string
   label: string
-  status: 'already-had-one' | 'downloaded' | 'nothing-found' | 'failed'
+  status: 'has-embedded' | 'already-had-one' | 'downloaded' | 'nothing-found' | 'failed'
   detail?: string
 }
 
