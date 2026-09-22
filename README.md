@@ -5,6 +5,10 @@
   Your own files, browsed like a streaming app, played like VLC.</p>
 </div>
 
+<p align="center">
+  <a href="https://github.com/KaisCommitted/cassette/releases/latest/download/Cassette-Setup.exe"><b>Download for Windows</b></a>
+</p>
+
 ---
 
 Cassette points at a folder on your disk, works out what is in it, and gives you
@@ -48,7 +52,11 @@ the current episode. Night mode evens out quiet dialogue and loud scenes.
 Thumbnails are frames pulled from your own files, so a card is never blank and
 no artwork is downloaded to get started.
 
-## Running it
+Once installed it updates itself: it checks for a new release on launch and
+offers it, but nothing downloads until you click and nothing installs until you
+say so.
+
+## Building it yourself
 
 Requires [Node.js](https://nodejs.org) 20 or newer and Windows.
 
