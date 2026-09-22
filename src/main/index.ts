@@ -1,4 +1,5 @@
 import { app, ipcMain, Menu } from 'electron'
+import { join } from 'node:path'
 import { IPC, type Library, type PlaybackState } from '@shared/types'
 import { describeKey } from './input/descriptors'
 import { BindingsStore } from './input/bindingsStore'
@@ -37,6 +38,8 @@ import { MetadataStore } from './tmdb/metadataStore'
 import { ArtworkCache } from './tmdb/artworkCache'
 import { serveArtwork } from './tmdb/artProtocol'
 import { registerCustomSchemes } from './protocolSchemes'
+import { serveRenderer } from './appProtocol'
+import { scheduleTestCapture } from './testCapture'
 import { initUpdater } from './updater'
 
 /**
@@ -72,6 +75,27 @@ async function bootstrap(): Promise<void> {
   const bindings = new BindingsStore(keybindsFile())
   const metadata = new MetadataStore()
   await Promise.all([settings.load(), progress.load(), bindings.load(), metadata.load()])
+
+  // The renderer is served over app:// rather than loaded from disk, so it
+  // has a real origin and can request our other custom schemes. Registered
+  // before any window opens, since the first load hits it immediately.
+  const thumbnails = new ThumbnailService()
+  const artwork = new ArtworkCache()
+
+  // Development serves the renderer from Vite over http, where the standalone
+  // schemes work. A packaged build serves everything from app:// instead, so
+  // images share the page origin.
+  if (process.env.ELECTRON_RENDERER_URL) {
+    serveThumbnails(thumbnails, () => ctx?.library ?? null)
+    serveArtwork(artwork)
+  } else {
+    serveRenderer({
+      rendererDir: join(__dirname, '..', 'renderer'),
+      artwork,
+      thumbnails,
+      getLibrary: () => ctx?.library ?? null
+    })
+  }
 
   const mainWindow = createMainWindow()
   // Order matters: the video window must exist before the overlay so the
@@ -116,8 +140,6 @@ async function bootstrap(): Promise<void> {
     library: await readJson<Library | null>(libraryFile(), null)
   }
   registerHandlers(ctx)
-  serveThumbnails(new ThumbnailService(), () => ctx?.library ?? null)
-  serveArtwork(new ArtworkCache())
 
   // Artwork on launch, not only after a rescan: a library scanned before a
   // TMDB key existed would otherwise stay bare until the user thought to
@@ -125,6 +147,7 @@ async function bootstrap(): Promise<void> {
   enrichInBackground(ctx)
 
   initUpdater(mainWindow)
+  scheduleTestCapture(mainWindow)
 
 
   await mpv.start(videoWindow.getNativeWindowHandle())

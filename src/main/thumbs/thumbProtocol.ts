@@ -1,5 +1,5 @@
-import { net, protocol } from 'electron'
-import { pathToFileURL } from 'node:url'
+import { protocol } from 'electron'
+import { serveLocalFile } from '../protocolResponse'
 import type { Library } from '@shared/types'
 import type { ThumbnailService } from './thumbnails'
 
@@ -28,7 +28,7 @@ export function serveThumbnails(
     const file = await thumbnails.ensure(key, videoPath)
     if (!file) return new Response('could not generate', { status: 404 })
 
-    return net.fetch(pathToFileURL(file).toString())
+    return serveLocalFile(file)
   })
 }
 

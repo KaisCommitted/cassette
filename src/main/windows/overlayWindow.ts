@@ -1,5 +1,6 @@
 import { BrowserWindow } from 'electron'
-import { join } from 'node:path'
+import { rendererUrl } from '../appProtocol'
+import { preloadPath } from './preloadPath'
 import { followBounds } from './followBounds'
 
 /**
@@ -26,7 +27,7 @@ export function createOverlayWindow(parent: BrowserWindow): BrowserWindow {
     skipTaskbar: true,
     hasShadow: false,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      preload: preloadPath(),
       contextIsolation: true,
       nodeIntegration: false,
       backgroundThrottling: false
@@ -40,7 +41,7 @@ export function createOverlayWindow(parent: BrowserWindow): BrowserWindow {
   if (process.env.ELECTRON_RENDERER_URL) {
     void overlay.loadURL(`${process.env.ELECTRON_RENDERER_URL}/overlay.html`)
   } else {
-    void overlay.loadFile(join(__dirname, '../renderer/overlay.html'))
+    void overlay.loadURL(rendererUrl('overlay.html'))
   }
 
   followBounds(parent, overlay)

@@ -1,5 +1,6 @@
 import type { Library, MetadataSnapshot, ProgressRecord } from '@shared/types'
-import { Art, PlayOverlay, artUrl } from '../components/Art'
+import { Art, PlayOverlay } from '../components/Art'
+import { artUrl, thumbUrl } from '../mediaUrls'
 import {
   continueWatching,
   describeSeasons,
@@ -65,7 +66,7 @@ export function HomeView({
             style={{
               backgroundImage: leadMeta?.backdropPath
                 ? `url("${artUrl(leadMeta.backdropPath, 'backdrop')}")`
-                : `url("cassette-thumb://${lead.key}")`
+                : `url("${thumbUrl(lead.key)}")`
             }}
           />
           <div className="hero-body">

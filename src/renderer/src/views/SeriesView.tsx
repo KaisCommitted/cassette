@@ -5,7 +5,8 @@ import type {
   SeriesEntry,
   SubtitleScanResult
 } from '@shared/types'
-import { Art, PlayOverlay, artUrl } from '../components/Art'
+import { Art, PlayOverlay } from '../components/Art'
+import { artUrl } from '../mediaUrls'
 import { ScanLog } from '../components/ScanLog'
 import { describeSeasons, formatRemaining, summariseSeries } from '../select'
 

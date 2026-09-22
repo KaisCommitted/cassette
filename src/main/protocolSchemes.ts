@@ -2,6 +2,7 @@ import { protocol } from 'electron'
 
 export const THUMB_SCHEME = 'cassette-thumb'
 export const ART_SCHEME = 'cassette-art'
+export const APP_SCHEME = 'app'
 
 /**
  * Declares every custom scheme in one call, before the app is ready.
@@ -27,6 +28,7 @@ export function registerCustomSchemes(): void {
 
   protocol.registerSchemesAsPrivileged([
     { scheme: THUMB_SCHEME, privileges },
-    { scheme: ART_SCHEME, privileges }
+    { scheme: ART_SCHEME, privileges },
+    { scheme: APP_SCHEME, privileges }
   ])
 }

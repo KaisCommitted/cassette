@@ -1,4 +1,8 @@
 import { app, ipcMain, type BrowserWindow } from 'electron'
+// electron-updater is CommonJS. Importing it statically lets the bundler emit a
+// plain require; a dynamic import() wraps it in a module object instead, and
+// autoUpdater came back undefined in the packaged build.
+import electronUpdater from 'electron-updater'
 import { IPC } from '@shared/types'
 
 /**
@@ -21,7 +25,7 @@ export function initUpdater(mainWindow: BrowserWindow): void {
   if (process.platform !== 'win32') return
 
   void (async () => {
-    const { autoUpdater } = await import('electron-updater')
+    const { autoUpdater } = electronUpdater
 
     autoUpdater.autoDownload = false
     autoUpdater.autoInstallOnAppQuit = false

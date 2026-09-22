@@ -1,5 +1,5 @@
-import { net, protocol } from 'electron'
-import { pathToFileURL } from 'node:url'
+import { protocol } from 'electron'
+import { serveLocalFile } from '../protocolResponse'
 import { IMAGE_SIZES } from './tmdbClient'
 import type { ArtworkCache } from './artworkCache'
 
@@ -30,6 +30,6 @@ export function serveArtwork(cache: ArtworkCache): void {
     const file = await cache.ensure(tmdbPath, size)
     if (!file) return new Response('not available', { status: 404 })
 
-    return net.fetch(pathToFileURL(file).toString())
+    return serveLocalFile(file)
   })
 }
