@@ -8,6 +8,7 @@ import type { ProgressStore } from '../state/progressStore'
 import type { SettingsStore } from '../state/settingsStore'
 import type { MpvController } from '../mpv/mpvController'
 import type { OverlayInteraction } from '../windows/overlayInteraction'
+import type { BindingsStore } from '../input/bindingsStore'
 
 export interface AppContext {
   settings: SettingsStore
@@ -17,6 +18,7 @@ export interface AppContext {
   videoWindow: BrowserWindow
   overlayWindow: BrowserWindow
   overlayInteraction: OverlayInteraction
+  bindings: BindingsStore
   /** Key of the file currently loaded, so progress ticks know where to go. */
   currentKey: string | null
   /** Cached library, used to resolve next/previous without re-reading disk. */
@@ -120,6 +122,12 @@ export function registerHandlers(ctx: AppContext): void {
     ctx.mainWindow.setFullScreen(next)
     ctx.mpv.setFullscreen(next)
   })
+
+  handle(IPC.getBindings, () => ctx.bindings.all())
+  handle(IPC.assignBinding, (descriptor: string, actionId: string) =>
+    ctx.bindings.assign(descriptor, actionId)
+  )
+  handle(IPC.resetBindings, () => ctx.bindings.reset())
 
   // A plain message, not invoke: it fires on every pointer move over the
   // controls and must not pay for a round trip.

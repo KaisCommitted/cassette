@@ -1,0 +1,133 @@
+import { describe, expect, it } from 'vitest'
+import type { Library, MediaFile, ProgressRecord } from '@shared/types'
+import { continueWatching, describeSeasons, formatRemaining, summariseSeries } from './select'
+
+function file(key: string): MediaFile {
+  return {
+    path: `C:\\${key}.mkv`,
+    sizeBytes: 1,
+    key,
+    title: 'M',
+    year: null,
+    season: 1,
+    episodes: [1],
+    kind: 'series',
+    tags: []
+  }
+}
+
+function record(over: Partial<ProgressRecord> & { key: string }): ProgressRecord {
+  return {
+    positionSeconds: 600,
+    durationSeconds: 2400,
+    lastWatched: '2026-09-20T10:00:00.000Z',
+    finished: false,
+    ...over
+  }
+}
+
+const library: Library = {
+  scannedAt: '',
+  series: [
+    {
+      kind: 'series',
+      id: 'm',
+      title: 'The Mentalist',
+      year: 2008,
+      seasons: [
+        {
+          season: 3,
+          episodes: [
+            { file: file('a'), season: 3, episodes: [16], label: 'S03E16' },
+            { file: file('b'), season: 3, episodes: [17], label: 'S03E17' }
+          ]
+        }
+      ]
+    }
+  ],
+  movies: [
+    { kind: 'movie', id: 'r', title: 'Another Round', year: 2020, file: file('m1') }
+  ]
+}
+
+describe('continueWatching', () => {
+  it('lists started, unfinished items', () => {
+    const progress = new Map([['a', record({ key: 'a' })]])
+    const items = continueWatching(library, progress)
+    expect(items.map((i) => i.key)).toEqual(['a'])
+    expect(items[0]!.title).toBe('The Mentalist')
+    expect(items[0]!.detail).toBe('S03E16')
+  })
+
+  it('leaves out finished items', () => {
+    const progress = new Map([['a', record({ key: 'a', finished: true })]])
+    expect(continueWatching(library, progress)).toEqual([])
+  })
+
+  it('ignores anything barely started, which is usually a mis-click', () => {
+    const progress = new Map([['a', record({ key: 'a', positionSeconds: 12 })]])
+    expect(continueWatching(library, progress)).toEqual([])
+  })
+
+  it('puts the most recently watched first', () => {
+    const progress = new Map([
+      ['a', record({ key: 'a', lastWatched: '2026-09-01T00:00:00.000Z' })],
+      ['b', record({ key: 'b', lastWatched: '2026-09-22T00:00:00.000Z' })]
+    ])
+    expect(continueWatching(library, progress).map((i) => i.key)).toEqual(['b', 'a'])
+  })
+
+  it('includes movies alongside episodes', () => {
+    const progress = new Map([['m1', record({ key: 'm1' })]])
+    const items = continueWatching(library, progress)
+    expect(items[0]!.title).toBe('Another Round')
+    expect(items[0]!.detail).toBe('2020')
+  })
+
+  it('reports how much is left, not how much is done', () => {
+    const progress = new Map([['a', record({ key: 'a' })]])
+    expect(continueWatching(library, progress)[0]!.remainingSeconds).toBe(1800)
+  })
+})
+
+describe('summariseSeries', () => {
+  it('counts episodes and finds the next unwatched still', () => {
+    const progress = new Map([['a', record({ key: 'a', finished: true })]])
+    const summary = summariseSeries(library.series[0]!, progress)
+    expect(summary.episodeCount).toBe(2)
+    expect(summary.watchedCount).toBe(1)
+    expect(summary.thumbKey).toBe('b')
+  })
+
+  it('falls back to the first episode when nothing is watched', () => {
+    expect(summariseSeries(library.series[0]!, new Map()).thumbKey).toBe('a')
+  })
+})
+
+describe('describeSeasons', () => {
+  it('describes a contiguous run as a range', () => {
+    expect(describeSeasons([3, 4, 5])).toBe('seasons 3 to 5')
+  })
+
+  it('names a single season', () => {
+    expect(describeSeasons([4])).toBe('season 4')
+  })
+
+  it('spells out gaps rather than implying a range', () => {
+    expect(describeSeasons([1, 3, 6])).toBe('seasons 1, 3 and 6')
+  })
+})
+
+describe('formatRemaining', () => {
+  it('rounds to minutes', () => {
+    expect(formatRemaining(1080)).toBe('18 min left')
+  })
+
+  it('splits hours out', () => {
+    expect(formatRemaining(3840)).toBe('1 h 04 left')
+  })
+
+  it('avoids saying zero minutes', () => {
+    expect(formatRemaining(30)).toBe('under a minute left')
+  })
+})

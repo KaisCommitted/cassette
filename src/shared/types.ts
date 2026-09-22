@@ -144,6 +144,12 @@ export interface MininetflixApi {
   /** Lets the click-through overlay accept clicks while over its controls. */
   setOverlayInteractive: (interactive: boolean) => void
   onPlaybackState: (cb: (s: PlaybackState) => void) => () => void
+  /** Runs whatever action a mouse descriptor is bound to. */
+  runInput: (descriptor: string) => void
+  getBindings: () => Promise<KeyBindings>
+  assignBinding: (descriptor: string, actionId: string) => Promise<KeyBindings>
+  resetBindings: () => Promise<KeyBindings>
+
   /** Fires when the cursor moves over the player, to reveal the controls. */
   onOverlayActivity: (cb: () => void) => () => void
 }
@@ -177,5 +183,71 @@ export const IPC = {
   toggleFullscreen: 'player:toggleFullscreen',
   setOverlayInteractive: 'overlay:setInteractive',
   overlayActivity: 'overlay:activity',
+  runInput: 'input:run',
+  getBindings: 'input:getBindings',
+  assignBinding: 'input:assignBinding',
+  resetBindings: 'input:resetBindings',
   playbackState: 'player:state'
 } as const
+
+/** An input descriptor: `key:Ctrl+Left`, `mouse:button4`, `mouse:wheelUp`. */
+export type InputDescriptor = string
+
+/** Descriptor to action id. Several descriptors may map to one action. */
+export type KeyBindings = Record<InputDescriptor, string>
+
+export interface ActionDefinition {
+  id: string
+  label: string
+  group: 'Playback' | 'Navigation' | 'Subtitles and audio' | 'Window'
+}
+
+/** Every bindable action, in the order the settings screen lists them. */
+export const ACTIONS: ActionDefinition[] = [
+  { id: 'playPause', label: 'Play or pause', group: 'Playback' },
+  { id: 'seekShortBack', label: 'Back 10 seconds', group: 'Playback' },
+  { id: 'seekShortForward', label: 'Forward 10 seconds', group: 'Playback' },
+  { id: 'seekMediumBack', label: 'Back 1 minute', group: 'Playback' },
+  { id: 'seekMediumForward', label: 'Forward 1 minute', group: 'Playback' },
+  { id: 'speedDown', label: 'Slow down', group: 'Playback' },
+  { id: 'speedUp', label: 'Speed up', group: 'Playback' },
+  { id: 'volumeUp', label: 'Volume up', group: 'Playback' },
+  { id: 'volumeDown', label: 'Volume down', group: 'Playback' },
+  { id: 'mute', label: 'Mute', group: 'Playback' },
+  { id: 'nextEpisode', label: 'Next episode', group: 'Navigation' },
+  { id: 'previousEpisode', label: 'Previous episode', group: 'Navigation' },
+  { id: 'stop', label: 'Close the player', group: 'Navigation' },
+  { id: 'cycleSubtitleTrack', label: 'Next subtitle track', group: 'Subtitles and audio' },
+  { id: 'cycleAudioTrack', label: 'Next audio track', group: 'Subtitles and audio' },
+  { id: 'subtitleDelayDown', label: 'Subtitles 50 ms earlier', group: 'Subtitles and audio' },
+  { id: 'subtitleDelayUp', label: 'Subtitles 50 ms later', group: 'Subtitles and audio' },
+  { id: 'toggleFullscreen', label: 'Fullscreen', group: 'Window' },
+  { id: 'hideAndPause', label: 'Pause and hide (works anywhere)', group: 'Window' }
+]
+
+/** VLC's defaults, which is what the app ships with. */
+export const DEFAULT_BINDINGS: KeyBindings = {
+  'key:Space': 'playPause',
+  'key:f': 'toggleFullscreen',
+  'key:Left': 'seekShortBack',
+  'key:Right': 'seekShortForward',
+  'key:Ctrl+Left': 'seekMediumBack',
+  'key:Ctrl+Right': 'seekMediumForward',
+  'key:Up': 'volumeUp',
+  'key:Down': 'volumeDown',
+  'key:m': 'mute',
+  'key:v': 'cycleSubtitleTrack',
+  'key:b': 'cycleAudioTrack',
+  'key:g': 'subtitleDelayDown',
+  'key:h': 'subtitleDelayUp',
+  'key:n': 'nextEpisode',
+  'key:p': 'previousEpisode',
+  'key:+': 'speedUp',
+  'key:-': 'speedDown',
+  'key:Escape': 'stop',
+  'mouse:left': 'playPause',
+  'mouse:wheelUp': 'volumeUp',
+  'mouse:wheelDown': 'volumeDown',
+  'mouse:double': 'toggleFullscreen',
+  'key:Ctrl+Alt+Space': 'hideAndPause'
+}

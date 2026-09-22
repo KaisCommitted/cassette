@@ -52,9 +52,11 @@ export function createOverlayInteraction(
       overlay.webContents.send(IPC.overlayActivity)
     }
 
-    const overControls =
-      inside && point.y >= bounds.y + bounds.height - CONTROL_ZONE_HEIGHT
-    setInteractive(overControls)
+    // Interactive across the whole window while playing, not just over the
+    // control bar: the video fills the window, so mouse bindings (wheel for
+    // volume, side buttons, double click for fullscreen) need to land
+    // somewhere, and mpv itself is given no input handling at all.
+    setInteractive(inside)
   }
 
   return {

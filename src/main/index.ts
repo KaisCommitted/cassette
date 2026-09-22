@@ -1,17 +1,22 @@
-import { app, BrowserWindow, Menu } from 'electron'
+import { app, ipcMain, Menu } from 'electron'
 import { IPC, type Library, type PlaybackState } from '@shared/types'
-import { describeKey, resolveBinding } from './input/resolveBinding'
+import { describeKey } from './input/descriptors'
+import { BindingsStore } from './input/bindingsStore'
+import { GlobalHotkeyMachine } from './input/globalHotkey'
+import { startNativeHook } from './input/nativeHook'
 import { findNext, findPrevious } from './library/playQueue'
 import { playItem, registerHandlers, stopPlayback, type AppContext } from './ipc/handlers'
 import { MpvController } from './mpv/mpvController'
 import { ProgressStore } from './state/progressStore'
 import { SettingsStore } from './state/settingsStore'
 import { readJson } from './state/atomicJson'
-import { libraryFile, progressFile, settingsFile } from './state/paths'
+import { keybindsFile, libraryFile, progressFile, settingsFile } from './state/paths'
 import { createMainWindow } from './windows/mainWindow'
 import { createOverlayWindow } from './windows/overlayWindow'
 import { createVideoWindow } from './windows/videoWindow'
 import { createOverlayInteraction } from './windows/overlayInteraction'
+import { ThumbnailService } from './thumbs/thumbnails'
+import { registerThumbProtocolSchemes, serveThumbnails } from './thumbs/thumbProtocol'
 
 /**
  * mpv draws into a native child window, but Chromium presents through
@@ -21,23 +26,28 @@ import { createOverlayInteraction } from './windows/overlayInteraction'
  * on a normal swapchain and restores the usual child-window z-order.
  *
  * This is far narrower than disabling hardware acceleration outright, which
- * also stopped the app's own windows painting.
+ * also stopped the app's own windows painting. It pairs with `--d3d11-flip=no`
+ * on the mpv side; neither works alone.
  */
 app.commandLine.appendSwitch('disable-direct-composition')
+
+// Custom schemes must be declared before the app is ready.
+registerThumbProtocolSchemes()
 
 // The stock Edit/View/Window menu is meaningless here and steals vertical space.
 Menu.setApplicationMenu(null)
 
 let ctx: AppContext | null = null
+let stopHook: (() => void) | null = null
 
 async function bootstrap(): Promise<void> {
   const settings = new SettingsStore(settingsFile())
   const progress = new ProgressStore(progressFile())
-  await settings.load()
-  await progress.load()
+  const bindings = new BindingsStore(keybindsFile())
+  await Promise.all([settings.load(), progress.load(), bindings.load()])
 
   const mainWindow = createMainWindow()
-  // Order matters: the video window must be created before the overlay so the
+  // Order matters: the video window must exist before the overlay so the
   // overlay's always-on-top level puts the controls above the picture.
   const videoWindow = createVideoWindow(mainWindow)
   const overlayWindow = createOverlayWindow(mainWindow)
@@ -51,6 +61,7 @@ async function bootstrap(): Promise<void> {
     settings,
     progress,
     mpv,
+    bindings,
     mainWindow,
     videoWindow,
     overlayWindow,
@@ -59,10 +70,32 @@ async function bootstrap(): Promise<void> {
     library: await readJson<Library | null>(libraryFile(), null)
   }
   registerHandlers(ctx)
+  serveThumbnails(new ThumbnailService(), () => ctx?.library ?? null)
 
-  // mpv renders into its own window: embedding it in the main window's handle
-  // leaves the video invisible, because Chromium's compositor paints over it.
   await mpv.start(videoWindow.getNativeWindowHandle())
+
+  const hotkey = new GlobalHotkeyMachine({
+    isArmed: () => Boolean(mpv.getState().path) && !mpv.getState().paused,
+    isAppFocused: () => mainWindow.isVisible(),
+    pauseAndHide: async () => {
+      await mpv.setPaused(true)
+      overlayWindow.hide()
+      videoWindow.hide()
+      mainWindow.hide()
+    },
+    restoreAndResume: async () => {
+      mainWindow.show()
+      videoWindow.show()
+      overlayWindow.show()
+      mainWindow.focus()
+      await mpv.setPaused(false)
+    }
+  })
+
+  stopHook = startNativeHook({
+    globalDescriptor: () => bindings.descriptorsFor('hideAndPause')[0] ?? null,
+    onTrigger: () => void hotkey.trigger()
+  })
 
   async function runAction(action: string): Promise<void> {
     const state = mpv.getState()
@@ -77,6 +110,10 @@ async function bootstrap(): Promise<void> {
         return mpv.seekRelative(-60)
       case 'seekMediumForward':
         return mpv.seekRelative(60)
+      case 'speedUp':
+        return mpv.setSpeed(state.speed + 0.25)
+      case 'speedDown':
+        return mpv.setSpeed(state.speed - 0.25)
       case 'volumeUp':
         return mpv.setVolume(state.volume + 5)
       case 'volumeDown':
@@ -109,20 +146,42 @@ async function bootstrap(): Promise<void> {
         mpv.setFullscreen(next)
         return
       }
+      case 'hideAndPause':
+        await hotkey.trigger()
+        return
       case 'stop':
         if (!state.path) return
         if (ctx) await stopPlayback(ctx)
+        hotkey.clear()
         return
       default:
         return
     }
   }
 
+  /** Actions that only make sense with the player open. */
+  const playerOnly = new Set([
+    'playPause',
+    'seekShortBack',
+    'seekShortForward',
+    'seekMediumBack',
+    'seekMediumForward',
+    'speedUp',
+    'speedDown',
+    'cycleSubtitleTrack',
+    'cycleAudioTrack',
+    'subtitleDelayDown',
+    'subtitleDelayUp',
+    'nextEpisode',
+    'previousEpisode',
+    'stop'
+  ])
+
   // Keyboard: Chromium only sees these while the main window has focus,
   // which is exactly the scope we want — nothing here is global.
   mainWindow.webContents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown') return
-    const action = resolveBinding(
+    const action = ctx?.bindings.resolve(
       describeKey({
         key: input.key,
         control: input.control,
@@ -131,7 +190,18 @@ async function bootstrap(): Promise<void> {
       })
     )
     if (!action) return
+    // Typing in the search box must not fire playback shortcuts.
+    if (playerOnly.has(action) && !mpv.getState().path) return
     event.preventDefault()
+    void runAction(action)
+  })
+
+  // Mouse bindings arrive as descriptors from the overlay, which covers the
+  // video while playing. They resolve through exactly the same table as keys.
+  ipcMain.on(IPC.runInput, (_event, descriptor: string) => {
+    const action = ctx?.bindings.resolve(descriptor)
+    if (!action) return
+    if (playerOnly.has(action) && !mpv.getState().path) return
     void runAction(action)
   })
 
@@ -157,6 +227,9 @@ async function bootstrap(): Promise<void> {
     if (!overlayWindow.isDestroyed()) {
       overlayWindow.webContents.send(IPC.playbackState, state)
     }
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(IPC.playbackState, state)
+    }
     const key = ctx?.currentKey
     if (!key || state.durationSeconds <= 0 || state.loading) return
     progress.record(key, state.positionSeconds, state.durationSeconds)
@@ -177,8 +250,7 @@ async function bootstrap(): Promise<void> {
     void (async () => {
       const { scanLibrary } = await import('./library/scanner')
       const roots = settings.get().libraryRoots
-      const library =
-        ctx?.library ?? (roots.length > 0 ? await scanLibrary(roots) : null)
+      const library = ctx?.library ?? (roots.length > 0 ? await scanLibrary(roots) : null)
       if (!library || !ctx) return
       ctx.library = library
       const { flattenPlayable } = await import('./library/playQueue')
@@ -193,6 +265,7 @@ void app.whenReady().then(bootstrap)
 app.on('window-all-closed', () => app.quit())
 
 app.on('before-quit', () => {
+  stopHook?.()
   if (!ctx) return
   void ctx.progress.save()
   ctx.mpv.dispose()

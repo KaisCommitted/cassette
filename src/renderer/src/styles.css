@@ -1,0 +1,493 @@
+/*
+ * Mininetflix — a private projection room, not a streaming storefront.
+ *
+ * The material here is your own files: video frames, release tags, folder
+ * names. The design leans into that rather than imitating a catalogue of
+ * posters, so cards are 16:9 stills and the interface says plainly what you
+ * actually own.
+ */
+
+:root {
+  --ground: #0e1013;
+  --panel: #161a1f;
+  --panel-hi: #1d232a;
+  --line: #232a31;
+  --text: #e8e6e1;
+  --muted: #8a9199;
+  --lamp: #e8a33d;
+
+  --rail-width: 212px;
+  --gap: 20px;
+  --radius: 4px;
+
+  /* Bahnschrift ships with Windows and reads as technical labelling, which
+     suits an archive better than another geometric sans. */
+  --display: 'Bahnschrift', 'DIN Alternate', 'Segoe UI Variable Display', sans-serif;
+  --body: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--ground);
+  color: var(--text);
+  font-family: var(--body);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+button {
+  font-family: inherit;
+  color: inherit;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a323a;
+  border-radius: 99px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---------- shell ---------- */
+
+.shell {
+  display: grid;
+  grid-template-columns: var(--rail-width) 1fr;
+  height: 100%;
+}
+
+.rail {
+  border-right: 1px solid var(--line);
+  padding: 22px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--panel);
+}
+
+.wordmark {
+  font-family: var(--display);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 0 10px 20px;
+}
+.wordmark span {
+  color: var(--lamp);
+}
+
+.rail-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.rail-link:hover {
+  background: var(--panel-hi);
+  color: var(--text);
+}
+.rail-link[aria-current='true'] {
+  background: var(--panel-hi);
+  color: var(--text);
+  box-shadow: inset 2px 0 0 var(--lamp);
+}
+.rail-link .count {
+  font-size: 12px;
+  color: #5f686f;
+  font-variant-numeric: tabular-nums;
+}
+
+.rail-foot {
+  margin-top: auto;
+  padding: 10px;
+  font-size: 11.5px;
+  color: #5f686f;
+  line-height: 1.5;
+}
+
+.main {
+  overflow-y: auto;
+  padding: 26px 30px 60px;
+}
+
+/* ---------- headings ---------- */
+
+.page-title {
+  font-family: var(--display);
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  margin: 0 0 4px;
+}
+
+.page-sub {
+  color: var(--muted);
+  margin: 0 0 26px;
+  font-size: 13.5px;
+}
+
+.section-title {
+  font-family: var(--display);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  margin: 30px 0 12px;
+}
+.section-title:first-child {
+  margin-top: 0;
+}
+
+/* ---------- search ---------- */
+
+.search {
+  width: 100%;
+  max-width: 420px;
+  padding: 9px 12px;
+  margin-bottom: 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13.5px;
+}
+.search:focus {
+  outline: 2px solid var(--lamp);
+  outline-offset: 1px;
+}
+.search::placeholder {
+  color: #5f686f;
+}
+
+/* ---------- cards ---------- */
+
+.grid {
+  display: grid;
+  gap: var(--gap);
+}
+.grid.wide {
+  grid-template-columns: repeat(auto-fill, minmax(288px, 1fr));
+}
+.grid.tight {
+  grid-template-columns: repeat(auto-fill, minmax(216px, 1fr));
+}
+
+.card {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+.card:hover {
+  border-color: #33414c;
+}
+.card:focus-visible {
+  outline: 2px solid var(--lamp);
+  outline-offset: 2px;
+}
+
+.card-still {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: #0a0c0e;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.card-still img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.card-still .placeholder {
+  font-family: var(--display);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  color: #3c454d;
+}
+
+/* Watch progress reads as a lamp-lit seam along the bottom of the still. */
+.card-progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--lamp);
+}
+
+.card-body {
+  padding: 11px 12px 13px;
+}
+.card-name {
+  font-size: 13.5px;
+  line-height: 1.35;
+  margin-bottom: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.card-meta {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge-watched {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(10, 12, 14, 0.82);
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ---------- episode list ---------- */
+
+.episode {
+  display: grid;
+  grid-template-columns: 148px 1fr auto;
+  gap: 14px;
+  align-items: center;
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.episode:hover {
+  background: var(--panel);
+  border-color: var(--line);
+}
+.episode:focus-visible {
+  outline: 2px solid var(--lamp);
+  outline-offset: 2px;
+}
+.episode .still {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: 3px;
+  overflow: hidden;
+  background: #0a0c0e;
+}
+.episode .still img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.episode .no {
+  font-family: var(--display);
+  font-size: 13px;
+  color: var(--lamp);
+  margin-bottom: 2px;
+}
+.episode .file {
+  font-size: 11.5px;
+  color: #5f686f;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 52ch;
+}
+.episode .right {
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.season-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 18px 0 16px;
+  flex-wrap: wrap;
+}
+.season-tab {
+  padding: 6px 13px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+.season-tab[aria-selected='true'] {
+  background: var(--lamp);
+  border-color: var(--lamp);
+  color: #171106;
+}
+
+/* ---------- buttons ---------- */
+
+.btn {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 8px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.btn:hover {
+  background: var(--panel-hi);
+}
+.btn.primary {
+  background: var(--lamp);
+  border-color: var(--lamp);
+  color: #171106;
+  font-weight: 600;
+}
+.btn.primary:hover {
+  filter: brightness(1.08);
+}
+.btn:focus-visible {
+  outline: 2px solid var(--lamp);
+  outline-offset: 2px;
+}
+
+.back {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+  font-size: 13px;
+  cursor: pointer;
+  margin-bottom: 14px;
+}
+.back:hover {
+  color: var(--text);
+}
+
+/* ---------- empty / setup ---------- */
+
+.center {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 40px;
+}
+.center h1 {
+  font-family: var(--display);
+  font-size: 32px;
+  font-weight: 600;
+  margin: 0 0 8px;
+  letter-spacing: 0.02em;
+}
+.center p {
+  color: var(--muted);
+  margin: 0 0 22px;
+  max-width: 46ch;
+  line-height: 1.55;
+}
+
+.empty {
+  color: var(--muted);
+  padding: 18px 0 8px;
+  font-size: 13.5px;
+}
+
+/* ---------- settings ---------- */
+
+.field {
+  margin-bottom: 22px;
+  max-width: 620px;
+}
+.field-label {
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+.field-help {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: 6px;
+  line-height: 1.5;
+}
+.path-box {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.path {
+  flex: 1;
+  padding: 8px 11px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 12.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bind-table {
+  width: 100%;
+  max-width: 620px;
+  border-collapse: collapse;
+}
+.bind-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.bind-table td:last-child {
+  text-align: right;
+}
+.key {
+  display: inline-block;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--panel);
+  font-size: 12px;
+  font-family: var(--display);
+  letter-spacing: 0.02em;
+}
+.key.listening {
+  border-color: var(--lamp);
+  color: var(--lamp);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

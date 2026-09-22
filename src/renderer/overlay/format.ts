@@ -20,3 +20,21 @@ export function trackLabel(track: {
   if (parts.length > 0) return parts.join(' · ')
   return track.codec ? `Track ${track.id} (${track.codec})` : `Track ${track.id}`
 }
+
+/** Mouse descriptor for a raw browser event; must match the main process. */
+export function describeMouse(event: MouseEvent): string {
+  switch (event.button) {
+    case 0:
+      return 'mouse:left'
+    case 1:
+      return 'mouse:middle'
+    case 2:
+      return 'mouse:right'
+    case 3:
+      return 'mouse:button4'
+    case 4:
+      return 'mouse:button5'
+    default:
+      return `mouse:button${event.button + 1}`
+  }
+}

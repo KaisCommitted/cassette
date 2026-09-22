@@ -38,6 +38,13 @@ const api: MininetflixApi = {
     ipcRenderer.send(IPC.setOverlayInteractive, interactive)
   },
 
+  runInput: (descriptor) => {
+    ipcRenderer.send(IPC.runInput, descriptor)
+  },
+  getBindings: () => invoke(IPC.getBindings),
+  assignBinding: (descriptor, actionId) => invoke(IPC.assignBinding, descriptor, actionId),
+  resetBindings: () => invoke(IPC.resetBindings),
+
   onPlaybackState: (cb) => {
     const listener = (_e: unknown, s: PlaybackState): void => cb(s)
     ipcRenderer.on(IPC.playbackState, listener)
