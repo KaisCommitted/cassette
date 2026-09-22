@@ -96,15 +96,15 @@ export function HomeView({
         </section>
       )}
 
-      <div className="row-head" style={{ marginTop: lead && !searching ? 26 : 0 }}>
+      <div className="library-head enter enter-1">
         <input
           className="search"
           type="search"
           value={query}
           placeholder="Search your library"
           onChange={(e) => onQueryChange(e.target.value)}
-          style={{ marginBottom: 0 }}
         />
+        <div className="spacer" />
         {metadataBusy && (
           <span className="metadata-note">Fetching artwork for {metadataBusy}</span>
         )}
@@ -118,7 +118,7 @@ export function HomeView({
 
       {!searching && resume.length > 1 && (
         <>
-          <div className="row-head">
+          <div className="row-head enter enter-2">
             <h2>Also on the go</h2>
           </div>
           <div className="still-grid">
@@ -162,7 +162,7 @@ export function HomeView({
 
       {series.length > 0 && (
         <>
-          <div className="row-head">
+          <div className="row-head enter enter-3">
             <h2>Series</h2>
             <span className="note">
               {series.length === 1 ? '1 series' : `${series.length} series`}
@@ -203,7 +203,7 @@ export function HomeView({
 
       {movies.length > 0 && (
         <>
-          <div className="row-head">
+          <div className="row-head enter enter-4">
             <h2>Films</h2>
             <span className="note">
               {movies.length === 1 ? '1 film' : `${movies.length} films`}

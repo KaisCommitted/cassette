@@ -5,7 +5,7 @@ import type {
   SeriesEntry,
   SubtitleScanResult
 } from '@shared/types'
-import { Art, PlayOverlay } from '../components/Art'
+import { Art, PlayOverlay, artUrl } from '../components/Art'
 import { ScanLog } from '../components/ScanLog'
 import { describeSeasons, formatRemaining, summariseSeries } from '../select'
 
@@ -27,6 +27,7 @@ export function SeriesView({
   onRefreshProgress
 }: SeriesViewProps) {
   const summary = summariseSeries(series, progress)
+  const seriesMeta = metadata.series[series.id]
   const [season, setSeason] = useState(
     () =>
       series.seasons.find((s) =>
@@ -60,18 +61,30 @@ export function SeriesView({
 
   return (
     <>
-      <button className="back" onClick={onBack}>
-        Back to library
-      </button>
-
-      <h1 className="page-title">
-        {series.title}
-        {series.year ? ` (${series.year})` : ''}
-      </h1>
-      <p className="page-sub">
-        {summary.episodeCount} episodes across {describeSeasons(summary.seasonNumbers)}
-        {summary.watchedCount > 0 && `, ${summary.watchedCount} watched`}.
-      </p>
+      <section className="series-hero">
+        {seriesMeta?.backdropPath && (
+          <div
+            className="hero-art"
+            style={{ backgroundImage: `url("${artUrl(seriesMeta.backdropPath, 'backdrop')}")` }}
+          />
+        )}
+        <div className="inner">
+          <button className="back" onClick={onBack}>
+            Back to library
+          </button>
+          <h1 className="page-title">
+            {seriesMeta?.title ?? series.title}
+            {series.year ? ` (${series.year})` : ''}
+          </h1>
+          <p className="page-sub" style={{ marginBottom: 12 }}>
+            {summary.episodeCount} episodes across {describeSeasons(summary.seasonNumbers)}
+            {summary.watchedCount > 0 && `, ${summary.watchedCount} watched`}.
+          </p>
+          {seriesMeta?.overview && (
+            <p className="hero-overview" style={{ marginBottom: 0 }}>{seriesMeta.overview}</p>
+          )}
+        </div>
+      </section>
 
       <div className="series-actions">
         <button

@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { KeyBindings, MetadataSnapshot, Settings } from '@shared/types'
 import { useLibrary } from './useLibrary'
+import { useAmbient } from './useAmbient'
+import { artUrl } from './components/Art'
+import { continueWatching } from './select'
 import { HomeView } from './views/HomeView'
 import { SeriesView } from './views/SeriesView'
 import { SettingsView } from './views/SettingsView'
@@ -37,11 +40,14 @@ export function App() {
     return off
   }, [refreshProgress])
 
-  // Artwork arrives after a scan, so take the update when it lands.
-  useEffect(() => window.cassette.onMetadataReady((next) => {
-    setMetadata(next)
-    setMetadataBusy(null)
-  }), [])
+  useEffect(
+    () =>
+      window.cassette.onMetadataReady((next) => {
+        setMetadata(next)
+        setMetadataBusy(null)
+      }),
+    []
+  )
 
   const play = useCallback((path: string, key: string) => {
     void window.cassette.play(path, key)
@@ -51,6 +57,34 @@ export function App() {
     await chooseFolder()
     setSettings(await window.cassette.getSettings())
   }, [chooseFolder])
+
+  const series =
+    view.name === 'series' ? library?.series.find((s) => s.id === view.id) : undefined
+
+  /*
+   * The page takes its colour from whatever is on screen — the featured
+   * backdrop on the library, or the series you have opened. A flat near-black
+   * behind vivid poster art reads as dead.
+   */
+  const ambientSource = useMemo(() => {
+    if (!library) return null
+    if (view.name === 'series' && series) {
+      const meta = metadata.series[series.id]
+      return meta?.backdropPath ? artUrl(meta.backdropPath, 'backdrop') : null
+    }
+    const lead = continueWatching(library, progress)[0]
+    if (!lead) return null
+    const movieId = library.movies.find((m) => m.file.key === lead.key)?.id
+    const meta = lead.seriesId
+      ? metadata.series[lead.seriesId]
+      : movieId
+        ? metadata.movies[movieId]
+        : undefined
+    return meta?.backdropPath ? artUrl(meta.backdropPath, 'backdrop') : null
+  }, [library, progress, metadata, view, series])
+
+  const ambient = useAmbient(ambientSource)
+  const onSettings = view.name === 'settings'
 
   if (loading && !library) {
     return <div className="center">Reading your folder…</div>
@@ -73,50 +107,55 @@ export function App() {
     )
   }
 
-  const series = view.name === 'series' ? library.series.find((s) => s.id === view.id) : null
-
   return (
-    <div className="shell">
+    <div className="shell" style={{ ['--ambient' as string]: ambient.rgb }}>
       <nav className="rail">
         <div className="wordmark">
           Cas<span>sette</span>
         </div>
 
-        <button
-          className="rail-link"
-          aria-current={view.name === 'home' && query === ''}
-          onClick={() => {
-            setView({ name: 'home' })
-            setQuery('')
-          }}
-        >
-          Library
-        </button>
-
-        <button
-          className="rail-link"
-          aria-current={view.name === 'settings'}
-          onClick={() => setView({ name: 'settings' })}
-        >
-          Settings
-        </button>
+        <div className="rail-nav">
+          {/* Slides between items, so the change reads as movement. */}
+          <span
+            className="rail-marker"
+            style={{ transform: `translateY(${onSettings ? 41 : 0}px)` }}
+            aria-hidden="true"
+          />
+          <button
+            className="rail-link"
+            aria-current={!onSettings}
+            onClick={() => {
+              setView({ name: 'home' })
+              setQuery('')
+            }}
+          >
+            Library
+          </button>
+          <button
+            className="rail-link"
+            aria-current={onSettings}
+            onClick={() => setView({ name: 'settings' })}
+          >
+            Settings
+          </button>
+        </div>
 
         <div className="rail-foot">
-          {library.series.length} series, {library.movies.length} films.
-          <br />
-          Stills are frames from your own files.
+          Artwork and episode details from TMDB. This product uses the TMDB API but is
+          not endorsed or certified by TMDB.
         </div>
       </nav>
 
-      <main className="main">
+      {/* Keyed so a view change replays the entrance rather than cutting. */}
+      <main className="main" key={view.name === 'series' ? view.id : view.name}>
         {view.name === 'home' && (
           <HomeView
             library={library}
             progress={progress}
-            query={query}
-            onQueryChange={setQuery}
             metadata={metadata}
             metadataBusy={metadataBusy}
+            query={query}
+            onQueryChange={setQuery}
             onOpenSeries={(id) => setView({ name: 'series', id })}
             onPlay={play}
           />
@@ -144,9 +183,7 @@ export function App() {
             onChooseFolder={() => void handleChooseFolder()}
             onRescan={() => void rescan()}
             onAssign={(descriptor, actionId) => {
-              void window.cassette
-                .assignBinding(descriptor, actionId)
-                .then(setBindings)
+              void window.cassette.assignBinding(descriptor, actionId).then(setBindings)
             }}
             onChangeSettings={(changes) => {
               void window.cassette.updateSettings(changes).then(setSettings)
