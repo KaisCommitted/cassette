@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import {
   IPC,
+  type BundledKeyAvailability,
   type Library,
   type CassetteApi,
   type MetadataSnapshot,
@@ -24,6 +25,7 @@ function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
 const api: CassetteApi = {
   chooseFolder: () => invoke<string | null>(IPC.chooseFolder),
   getSettings: () => invoke<Settings>(IPC.getSettings),
+  getBundledKeys: () => invoke<BundledKeyAvailability>(IPC.getBundledKeys),
   setRoots: (roots) => invoke<Library>(IPC.setRoots, roots),
   getLibrary: () => invoke<Library | null>(IPC.getLibrary),
   rescan: () => invoke<Library>(IPC.rescan),

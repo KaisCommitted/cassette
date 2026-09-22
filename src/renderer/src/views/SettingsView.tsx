@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ACTIONS, type KeyBindings, type Settings } from '@shared/types'
+import {
+  ACTIONS,
+  type BundledKeyAvailability,
+  type KeyBindings,
+  type Settings
+} from '@shared/types'
 import { SubtitleSettings } from '../components/SubtitleSettings'
 import { describeCaptured, humaniseDescriptor } from '../inputDescriptors'
 
@@ -25,6 +30,17 @@ export function SettingsView({
   scanning
 }: SettingsViewProps) {
   const [listening, setListening] = useState<string | null>(null)
+
+  // Whether this build ships its own keys decides what an empty box means, so
+  // it is asked for once rather than guessed at.
+  const [bundled, setBundled] = useState<BundledKeyAvailability>({
+    tmdb: false,
+    subdl: false,
+    openSubtitles: false
+  })
+  useEffect(() => {
+    void window.cassette.getBundledKeys().then(setBundled)
+  }, [])
 
   const descriptorsFor = useCallback(
     (actionId: string) =>
@@ -169,13 +185,13 @@ export function SettingsView({
               className="search"
               type="password"
               value={settings.subdlApiKey ?? ''}
-              placeholder="Not set"
+              placeholder={bundled.subdl ? 'Using the built-in key' : 'Not set'}
               onChange={(e) => onChangeSettings({ subdlApiKey: e.target.value || null })}
             />
             <p className="field-help">
-              The one worth setting. A free key from subdl.com allows around two
-              thousand searches a day, which is enough to fill in a whole series in
-              one go.
+              {bundled.subdl
+                ? 'Cassette comes with a key, so this already works. Put your own here if you would rather not share its daily limit — free from subdl.com. Clear the box to go back to the built-in one.'
+                : 'A free key from subdl.com allows around two thousand searches a day, which is enough to fill in a whole series in one go.'}
             </p>
           </div>
 
@@ -202,7 +218,7 @@ export function SettingsView({
               className="search"
               type="password"
               value={settings.openSubtitlesApiKey ?? ''}
-              placeholder="Not set"
+              placeholder={bundled.openSubtitles ? 'Using the built-in key' : 'Not set'}
               onChange={(e) =>
                 onChangeSettings({ openSubtitlesApiKey: e.target.value || null })
               }

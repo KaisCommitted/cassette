@@ -7,6 +7,7 @@ import { findLocalSubtitles } from '../subs/localSubtitles'
 import { scanForSubtitles, scanOne, type ScanScope } from '../subs/subtitleScan'
 import type { SleepTimer } from '../player/sleepTimer'
 import { libraryFile } from '../state/paths'
+import { bundledKeyAvailability, withBundledKeys } from '../state/bundledKeys'
 import { readJson, writeJsonAtomic } from '../state/atomicJson'
 import type { ProgressStore } from '../state/progressStore'
 import type { SettingsStore } from '../state/settingsStore'
@@ -64,7 +65,7 @@ export async function stopPlayback(ctx: AppContext): Promise<void> {
 
 /** Fills in artwork after a scan, in the background so browsing is not held up. */
 export function enrichInBackground(ctx: AppContext): void {
-  const token = ctx.settings.get().tmdbApiKey
+  const token = withBundledKeys(ctx.settings.get()).tmdbApiKey
   if (!token || !ctx.library) return
   const library = ctx.library
   void ctx.metadata
@@ -96,6 +97,8 @@ export function registerHandlers(ctx: AppContext): void {
   })
 
   handle(IPC.getSettings, () => ctx.settings.get())
+
+  handle(IPC.getBundledKeys, () => bundledKeyAvailability())
 
   handle(IPC.setRoots, async (roots: string[]): Promise<Library> => {
     await ctx.settings.setRoots(roots)
@@ -206,7 +209,7 @@ export function registerHandlers(ctx: AppContext): void {
 
   handle(IPC.scanSubtitles, async (scope: ScanScope) => {
     if (!ctx.library) return []
-    return scanForSubtitles(ctx.library, scope, ctx.settings.get(), (progress) => {
+    return scanForSubtitles(ctx.library, scope, withBundledKeys(ctx.settings.get()), (progress) => {
       if (!ctx.mainWindow.isDestroyed()) {
         ctx.mainWindow.webContents.send(IPC.subtitleScanProgress, progress)
       }
@@ -226,7 +229,7 @@ export function registerHandlers(ctx: AppContext): void {
     const target = findFile(ctx.library, path)
     if (!target) return null
 
-    const result = await scanOne(target.file, target.label, ctx.settings.get())
+    const result = await scanOne(target.file, target.label, withBundledKeys(ctx.settings.get()))
     await loadExternalSubtitles(ctx, path)
     return result
   })
@@ -248,7 +251,7 @@ export function registerHandlers(ctx: AppContext): void {
   handle(IPC.getMetadata, () => ctx.metadata.snapshot())
 
   handle(IPC.refreshMetadata, async (force?: boolean) => {
-    const token = ctx.settings.get().tmdbApiKey
+    const token = withBundledKeys(ctx.settings.get()).tmdbApiKey
     if (!token || !ctx.library) return ctx.metadata.snapshot()
     await ctx.metadata.enrich(ctx.library, new TmdbClient(token), {
       force: force === true,

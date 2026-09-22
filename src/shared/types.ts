@@ -205,6 +205,8 @@ export const FINISHED_THRESHOLD = 0.9
 export interface CassetteApi {
   chooseFolder: () => Promise<string | null>
   getSettings: () => Promise<Settings>
+  /** Which API keys this build already carries, so none need entering. */
+  getBundledKeys: () => Promise<BundledKeyAvailability>
   setRoots: (roots: string[]) => Promise<Library>
   getLibrary: () => Promise<Library | null>
   rescan: () => Promise<Library>
@@ -268,6 +270,7 @@ declare global {
 export const IPC = {
   chooseFolder: 'app:chooseFolder',
   getSettings: 'app:getSettings',
+  getBundledKeys: 'app:getBundledKeys',
   setRoots: 'app:setRoots',
   getLibrary: 'app:getLibrary',
   rescan: 'app:rescan',
@@ -391,6 +394,13 @@ export interface SubtitleScanResult {
   label: string
   status: 'has-embedded' | 'already-had-one' | 'downloaded' | 'nothing-found' | 'failed'
   detail?: string
+}
+
+/** True where the build supplies a working key of its own. */
+export interface BundledKeyAvailability {
+  tmdb: boolean
+  subdl: boolean
+  openSubtitles: boolean
 }
 
 export interface LocalSubtitle {

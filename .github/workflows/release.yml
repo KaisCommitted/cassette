@@ -85,8 +85,29 @@ jobs:
         shell: pwsh
         run: npm pkg set version=$("${{ github.ref_name }}" -replace '^v', '')
 
+      # The keys are compiled in here, so an installed copy works with no setup.
+      # They are secrets rather than source because this repository is public:
+      # a key committed to it would be found and revoked, breaking every
+      # installed copy. A build without them asks for keys in settings instead.
       - name: Build renderer and main
+        env:
+          CASSETTE_TMDB_KEY: ${{ secrets.CASSETTE_TMDB_KEY }}
+          CASSETTE_SUBDL_KEY: ${{ secrets.CASSETTE_SUBDL_KEY }}
+          CASSETTE_OPENSUBTITLES_KEY: ${{ secrets.CASSETTE_OPENSUBTITLES_KEY }}
         run: npm run build
+
+      # A release that shipped without its keys would look fine and quietly
+      # have no artwork and no subtitle search, so it is checked rather than
+      # assumed.
+      - name: Verify the keys were compiled in
+        shell: pwsh
+        run: |
+          $bundle = Get-Content out/main/index.js -Raw
+          foreach ($marker in @('__BUNDLED_TMDB_KEY__', '__BUNDLED_SUBDL_KEY__')) {
+            if ($bundle.Contains($marker)) { throw "$marker was never substituted" }
+          }
+          if (-not $bundle.Contains('subdl_')) { throw "the SubDL key is missing from the build" }
+          Write-Host "Keys are present in the build."
 
       - name: Build and publish the installer
         env:
