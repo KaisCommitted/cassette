@@ -165,10 +165,13 @@ export function ControlBar({
             setMenu(null)
           }}
           footer={
-            <DelayAdjuster
-              valueMs={state.subtitleDelayMs}
-              onChange={(ms) => void api.setSubtitleDelay(ms)}
-            />
+            <>
+              <SubtitleSearch />
+              <DelayAdjuster
+                valueMs={state.subtitleDelayMs}
+                onChange={(ms) => void api.setSubtitleDelay(ms)}
+              />
+            </>
           }
         />
       )}
@@ -249,6 +252,63 @@ function VolumeControl({ state }: { state: PlaybackState }) {
         aria-label="Volume"
         style={{ width: 84, accentColor: '#e50914', cursor: 'pointer' }}
       />
+    </div>
+  )
+}
+
+/**
+ * Fetches subtitles for the episode on screen, without leaving it.
+ *
+ * Realising the subtitles are wrong is something that happens a minute into
+ * an episode, not before starting it, so the search belongs here rather than
+ * only in the library. Anything found is added as another track, and the menu
+ * this sits in lists it immediately.
+ */
+function SubtitleSearch() {
+  const [status, setStatus] = useState<'idle' | 'searching' | string>('idle')
+
+  const run = (): void => {
+    if (status === 'searching') return
+    setStatus('searching')
+    void api
+      .findSubtitlesNow()
+      .then((result) => {
+        if (!result) return setStatus('Nothing to search for')
+        if (result.status === 'downloaded') return setStatus('Added — pick it above')
+        if (result.status === 'failed') return setStatus(result.detail ?? 'Search failed')
+        if (result.status === 'nothing-found') return setStatus('Nothing found')
+        return setStatus('Already had subtitles')
+      })
+      .catch(() => setStatus('Search failed'))
+  }
+
+  return (
+    <div
+      style={{
+        padding: '9px 12px',
+        borderTop: '1px solid rgba(255,255,255,0.09)'
+      }}
+    >
+      <button
+        onClick={run}
+        disabled={status === 'searching'}
+        style={{
+          width: '100%',
+          border: '1px solid rgba(255,255,255,0.16)',
+          borderRadius: 6,
+          padding: '6px 8px',
+          fontSize: 12,
+          fontFamily: 'inherit',
+          background: 'transparent',
+          color: '#f4f4f6',
+          cursor: status === 'searching' ? 'default' : 'pointer'
+        }}
+      >
+        {status === 'searching' ? 'Searching…' : 'Find subtitles online'}
+      </button>
+      {status !== 'idle' && status !== 'searching' && (
+        <div style={{ marginTop: 6, fontSize: 11.5, opacity: 0.62 }}>{status}</div>
+      )}
     </div>
   )
 }

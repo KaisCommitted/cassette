@@ -23,7 +23,8 @@ rather than trusting folder names, so release folders like
 `Show Season 3 Complete 1080p WEB-DL` do not confuse it. Multi-episode files
 (`S03E23E24`) are handled, and it tells you plainly what you actually own —
 "54 episodes across seasons 3 to 5" — rather than pretending a series is
-complete.
+complete. Anything under fifteen minutes is left out, so trailers, samples and
+featurettes stay out of your library.
 
 **Plays anything.** Playback is [mpv](https://mpv.io), embedded in the window,
 so MKV, HEVC, 10-bit and surround audio work with no transcoding, and embedded
@@ -36,8 +37,11 @@ Coming back to a series months later drops you back at the exact second.
 **Subtitles, on by themselves.** Cassette turns on a subtitle track in your
 preferred language when a file has one, preferring full dialogue over
 signs-only and forced tracks. It picks up subtitle files sitting next to the
-video too, and can search for them per episode, per season or for a whole
-series. Size, colour, outline, background and position are all adjustable.
+video too, and can search for more per episode, per season or for a whole
+series — or for the episode on screen, from the player's Subtitles menu. List
+several languages and it fetches one of each, so you can switch between them
+while watching. Size, colour, outline, background and position are all
+adjustable.
 
 **Controls that stay out of the way.** VLC's key bindings by default, all
 rebindable, and the same for mouse buttons — anything bindable to a key is

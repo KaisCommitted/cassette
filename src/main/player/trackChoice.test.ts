@@ -3,7 +3,7 @@ import type { TrackInfo } from '@shared/types'
 import { chooseAudioTrack, chooseSubtitleTrack } from './trackChoice'
 
 function track(over: Partial<TrackInfo> & { id: number; type: TrackInfo['type'] }): TrackInfo {
-  return { title: null, lang: null, codec: null, selected: false, ...over }
+  return { title: null, lang: null, codec: null, selected: false, externalFilename: null, ...over }
 }
 
 describe('chooseSubtitleTrack', () => {

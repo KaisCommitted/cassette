@@ -30,9 +30,30 @@ const LANG_HINTS: Record<string, string> = {
   german: 'ger',
   it: 'ita',
   ita: 'ita',
+  italian: 'ita',
   nl: 'dut',
+  dut: 'dut',
+  nld: 'dut',
+  dutch: 'dut',
   pt: 'por',
-  ru: 'rus'
+  por: 'por',
+  portuguese: 'por',
+  ru: 'rus',
+  rus: 'rus',
+  russian: 'rus'
+}
+
+/**
+ * One spelling for a language, whatever form it arrived in.
+ *
+ * Files, containers and subtitle services each name languages differently —
+ * `en`, `eng`, `English`, `en-US` — and comparing those forms directly makes
+ * the same language look like three. Everything settles on the three-letter
+ * code used in filenames.
+ */
+export function normaliseLanguage(value: string): string {
+  const base = value.toLowerCase().trim().split(/[-_]/)[0] ?? ''
+  return LANG_HINTS[base] ?? base
 }
 
 const NAMES: Record<string, string> = {

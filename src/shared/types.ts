@@ -86,6 +86,21 @@ export interface Settings {
   libraryRoots: string[]
   tmdbApiKey: string | null
   openSubtitlesApiKey: string | null
+  /**
+   * SubDL key, which is the one that makes subtitle search actually usable.
+   *
+   * OpenSubtitles allows a handful of downloads a day on a free account, so
+   * scanning a season exhausts it immediately. SubDL's free tier is a couple of
+   * thousand requests a day, and it is tried first whenever both are set.
+   */
+  subdlApiKey: string | null
+  /**
+   * Fetch a subtitle in every preferred language rather than only the first.
+   *
+   * With it on, a file ends up with one track per language you listed and you
+   * pick between them in the player.
+   */
+  downloadEveryPreferredLanguage: boolean
   /** Roll into the next episode when one finishes. */
   autoplayNext: boolean
   /** Language codes in order of preference, e.g. ['eng', 'fre']. */
@@ -96,6 +111,13 @@ export interface Settings {
   subtitleStyle: SubtitleStyle
   /** Even out loud and quiet passages — for watching at low volume. */
   nightAudio: boolean
+  /**
+   * Shortest file worth listing, in minutes.
+   *
+   * Libraries collect trailers, samples, featurettes and stray clips that are
+   * noise in a list of things to watch. Set to 0 to keep everything.
+   */
+  minimumDurationMinutes: number
 }
 
 export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = {
@@ -115,6 +137,13 @@ export interface TrackInfo {
   lang: string | null
   codec: string | null
   selected: boolean
+  /**
+   * Path this track was loaded from, for tracks that live outside the video.
+   *
+   * It is what tells an external subtitle apart from an embedded one, both to
+   * label it in the menu and to avoid adding the same file twice.
+   */
+  externalFilename: string | null
 }
 
 /** Playback state pushed from main to the overlay as mpv reports changes. */
@@ -150,12 +179,15 @@ export const DEFAULT_SETTINGS: Settings = {
   libraryRoots: [],
   tmdbApiKey: null,
   openSubtitlesApiKey: null,
+  subdlApiKey: null,
+  downloadEveryPreferredLanguage: true,
   autoplayNext: true,
   preferredSubtitleLanguages: ['eng', 'en'],
   preferredAudioLanguages: ['eng', 'en'],
   autoEnableSubtitles: true,
   subtitleStyle: DEFAULT_SUBTITLE_STYLE,
-  nightAudio: false
+  nightAudio: false,
+  minimumDurationMinutes: 15
 }
 
 export const MEDIA_EXTENSIONS = [
@@ -203,6 +235,8 @@ export interface CassetteApi {
   markWatched: (key: string, watched: boolean) => Promise<void>
   resumeSeries: (seriesId: string) => Promise<void>
   scanSubtitles: (scope: SubtitleScanScope) => Promise<SubtitleScanResult[]>
+  /** Searches online for the file playing right now and loads what it finds. */
+  findSubtitlesNow: () => Promise<SubtitleScanResult | null>
   listLocalSubtitles: () => Promise<LocalSubtitle[]>
   useSubtitleFile: (path: string) => Promise<void>
   setSleepTimer: (seconds: number | null) => Promise<void>
@@ -262,6 +296,7 @@ export const IPC = {
   markWatched: 'app:markWatched',
   resumeSeries: 'player:resumeSeries',
   scanSubtitles: 'subs:scan',
+  findSubtitlesNow: 'subs:findNow',
   listLocalSubtitles: 'subs:listLocal',
   useSubtitleFile: 'subs:use',
   setSleepTimer: 'player:setSleepTimer',

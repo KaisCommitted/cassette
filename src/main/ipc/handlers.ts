@@ -1,10 +1,10 @@
 import { BrowserWindow, dialog, ipcMain } from 'electron'
-import { IPC, type Library, type Settings } from '@shared/types'
+import { IPC, type Library, type MediaFile, type Settings } from '@shared/types'
 import { scanLibrary } from '../library/scanner'
 import { findNext, findPrevious, type PlayableItem } from '../library/playQueue'
 import { resumeTarget } from '../library/resume'
 import { findLocalSubtitles } from '../subs/localSubtitles'
-import { scanForSubtitles, type ScanScope } from '../subs/subtitleScan'
+import { scanForSubtitles, scanOne, type ScanScope } from '../subs/subtitleScan'
 import type { SleepTimer } from '../player/sleepTimer'
 import { libraryFile } from '../state/paths'
 import { readJson, writeJsonAtomic } from '../state/atomicJson'
@@ -99,7 +99,9 @@ export function registerHandlers(ctx: AppContext): void {
 
   handle(IPC.setRoots, async (roots: string[]): Promise<Library> => {
     await ctx.settings.setRoots(roots)
-    const library = await scanLibrary(roots)
+    const library = await scanLibrary(roots, {
+      minimumDurationMinutes: ctx.settings.get().minimumDurationMinutes
+    })
     await writeJsonAtomic(libraryFile(), library)
     ctx.library = library
     enrichInBackground(ctx)
@@ -113,7 +115,9 @@ export function registerHandlers(ctx: AppContext): void {
   })
 
   handle(IPC.rescan, async (): Promise<Library> => {
-    const library = await scanLibrary(ctx.settings.get().libraryRoots)
+    const library = await scanLibrary(ctx.settings.get().libraryRoots, {
+      minimumDurationMinutes: ctx.settings.get().minimumDurationMinutes
+    })
     await writeJsonAtomic(libraryFile(), library)
     ctx.library = library
     enrichInBackground(ctx)
@@ -209,6 +213,24 @@ export function registerHandlers(ctx: AppContext): void {
     })
   })
 
+  /**
+   * Searches for subtitles for the file playing right now, without leaving it.
+   *
+   * Whatever is found is added as extra tracks straight away, so the menu it
+   * was triggered from fills in rather than asking for a restart.
+   */
+  handle(IPC.findSubtitlesNow, async () => {
+    const path = ctx.mpv.getState().path
+    if (!path || !ctx.library) return null
+
+    const target = findFile(ctx.library, path)
+    if (!target) return null
+
+    const result = await scanOne(target.file, target.label, ctx.settings.get())
+    await loadExternalSubtitles(ctx, path)
+    return result
+  })
+
   handle(IPC.nextChapter, () => ctx.mpv.nextChapter())
   handle(IPC.previousChapter, () => ctx.mpv.previousChapter())
 
@@ -251,6 +273,50 @@ export function registerHandlers(ctx: AppContext): void {
     if (ctx.overlayWindow.isDestroyed()) return
     ctx.overlayWindow.setIgnoreMouseEvents(!interactive, { forward: true })
   })
+}
+
+/**
+ * Adds every subtitle file beside the video that mpv is not already showing.
+ *
+ * mpv picks up siblings named after the video on its own, but not ones in a
+ * `Subs` folder, and not files that appear after it opened. Adding them
+ * without selecting anything leaves the track that was chosen for the user's
+ * preferred language switched on.
+ */
+export async function loadExternalSubtitles(ctx: AppContext, path: string): Promise<number> {
+  const already = ctx.mpv.loadedSubtitlePaths()
+  const found = await findLocalSubtitles(path)
+  let added = 0
+  for (const sub of found) {
+    if (already.has(sub.path.toLowerCase())) continue
+    try {
+      await ctx.mpv.addSubtitleFile(sub.path, sub.label, sub.lang)
+      added++
+    } catch {
+      // A subtitle mpv refuses to parse should not stop the others loading.
+    }
+  }
+  if (added > 0) await ctx.mpv.refreshTracks()
+  return added
+}
+
+/** The library entry for a path, with the label the scan report should use. */
+function findFile(
+  library: Library,
+  path: string
+): { file: MediaFile; label: string } | null {
+  const wanted = path.toLowerCase()
+  for (const series of library.series) {
+    for (const season of series.seasons) {
+      for (const episode of season.episodes) {
+        if (episode.file.path.toLowerCase() === wanted) {
+          return { file: episode.file, label: `${series.title} ${episode.label}` }
+        }
+      }
+    }
+  }
+  const movie = library.movies.find((m) => m.file.path.toLowerCase() === wanted)
+  return movie ? { file: movie.file, label: movie.title } : null
 }
 
 /** Best label we can build for an item the renderer asked for by path. */

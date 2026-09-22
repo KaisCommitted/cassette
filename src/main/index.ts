@@ -8,9 +8,9 @@ import { startNativeHook } from './input/nativeHook'
 import { findNext, findPrevious } from './library/playQueue'
 import { SleepTimer } from './player/sleepTimer'
 import { chooseAudioTrack, chooseSubtitleTrack } from './player/trackChoice'
-import { findLocalSubtitles } from './subs/localSubtitles'
 import {
   enrichInBackground,
+  loadExternalSubtitles,
   playItem,
   registerHandlers,
   stopPlayback,
@@ -332,18 +332,17 @@ async function bootstrap(): Promise<void> {
       const audio = chooseAudioTrack(state.tracks, config.preferredAudioLanguages)
       if (audio !== null) await mpv.setAudioTrack(audio)
 
+      // Subtitle files beside the video come first: they are extra candidates
+      // for the choice below, and picking before loading them would settle on
+      // an embedded track while a preferred-language file sat unused.
+      if (ctx) await loadExternalSubtitles(ctx, state.path!)
+
       const subtitle = chooseSubtitleTrack(
-        state.tracks,
+        mpv.getState().tracks,
         config.preferredSubtitleLanguages,
         config.autoEnableSubtitles
       )
       if (subtitle !== null) await mpv.setSubtitleTrack(subtitle)
-
-      // Pull in any subtitle files sitting beside the video as extra options.
-      const local = await findLocalSubtitles(state.path!)
-      for (const sub of local) {
-        await mpv.addSubtitleFile(sub.path, sub.label).catch(() => undefined)
-      }
     })()
   })
 

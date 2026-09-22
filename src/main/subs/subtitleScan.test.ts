@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { Library, MediaFile } from '@shared/types'
-import { filesInScope } from './subtitleScan'
+import { DEFAULT_SETTINGS, type Library, type MediaFile, type Settings } from '@shared/types'
+import { filesInScope, wantedLanguages } from './subtitleScan'
 import { rankCandidates, type SubtitleCandidate } from './openSubtitles'
 
 function file(key: string): MediaFile {
@@ -64,6 +64,38 @@ describe('filesInScope', () => {
 
   it('labels each file so progress is readable', () => {
     expect(filesInScope(library, { kind: 'episode', key: 'a' })[0]!.label).toBe('Show S01E01')
+  })
+})
+
+describe('wantedLanguages', () => {
+  const settings = (over: Partial<Settings>): Settings => ({ ...DEFAULT_SETTINGS, ...over })
+
+  it('treats two- and three-letter codes as one language', () => {
+    // The shipped default is 'eng, en', which must not mean English twice.
+    expect(wantedLanguages(settings({ preferredSubtitleLanguages: ['eng', 'en'] }))).toEqual([
+      'eng'
+    ])
+  })
+
+  it('keeps every distinct language, in the order given', () => {
+    const chosen = wantedLanguages(
+      settings({ preferredSubtitleLanguages: ['fr', 'English', 'ara'] })
+    )
+    expect(chosen).toEqual(['fre', 'eng', 'ara'])
+  })
+
+  it('takes only the first when fetching every language is off', () => {
+    const chosen = wantedLanguages(
+      settings({
+        preferredSubtitleLanguages: ['fre', 'eng'],
+        downloadEveryPreferredLanguage: false
+      })
+    )
+    expect(chosen).toEqual(['fre'])
+  })
+
+  it('falls back to English rather than searching for nothing', () => {
+    expect(wantedLanguages(settings({ preferredSubtitleLanguages: [] }))).toEqual(['eng'])
   })
 })
 

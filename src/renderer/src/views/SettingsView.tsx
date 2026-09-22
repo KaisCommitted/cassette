@@ -99,6 +99,35 @@ export function SettingsView({
       </div>
 
       {settings && (
+        <div className="field">
+          <div className="field-label">Ignore anything shorter than</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <input
+              className="search"
+              type="number"
+              min={0}
+              max={120}
+              step={1}
+              value={settings.minimumDurationMinutes}
+              onChange={(e) =>
+                onChangeSettings({
+                  minimumDurationMinutes: clampMinutes(e.target.value)
+                })
+              }
+              style={{ width: 96 }}
+            />
+            <span style={{ fontSize: 13, opacity: 0.7 }}>minutes</span>
+          </div>
+          <p className="field-help">
+            Trailers, samples and featurettes end up in the same folders as what you
+            actually want to watch. Files are checked once and the answer is
+            remembered, so this only costs time on the first scan. Set it to 0 to keep
+            everything.
+          </p>
+        </div>
+      )}
+
+      {settings && (
         <>
           <h2 className="section-title">Playback</h2>
           <div className="field">
@@ -135,6 +164,39 @@ export function SettingsView({
 
           <h2 className="section-title">Subtitle downloads</h2>
           <div className="field">
+            <div className="field-label">SubDL API key</div>
+            <input
+              className="search"
+              type="password"
+              value={settings.subdlApiKey ?? ''}
+              placeholder="Not set"
+              onChange={(e) => onChangeSettings({ subdlApiKey: e.target.value || null })}
+            />
+            <p className="field-help">
+              The one worth setting. A free key from subdl.com allows around two
+              thousand searches a day, which is enough to fill in a whole series in
+              one go.
+            </p>
+          </div>
+
+          <div className="field">
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={settings.downloadEveryPreferredLanguage}
+                onChange={(e) =>
+                  onChangeSettings({ downloadEveryPreferredLanguage: e.target.checked })
+                }
+              />
+              Fetch every language you listed, not just the first
+            </label>
+            <p className="field-help">
+              Leaves each episode with one subtitle track per language, so you can
+              switch between them from the player's Subtitles menu.
+            </p>
+          </div>
+
+          <div className="field">
             <div className="field-label">OpenSubtitles API key</div>
             <input
               className="search"
@@ -146,9 +208,8 @@ export function SettingsView({
               }
             />
             <p className="field-help">
-              Needed only to download subtitles that are not already on disk. Without
-              a key, searching still reports which files already have subtitle files
-              beside them. Keys are free from opensubtitles.com.
+              Optional fallback, used only for languages SubDL could not supply. Free
+              accounts allow a few downloads a day, so it runs out quickly on its own.
             </p>
           </div>
         </>
@@ -211,4 +272,11 @@ export function SettingsView({
 
 function preventDefault(e: Event): void {
   e.preventDefault()
+}
+
+/** An empty or nonsense box means "keep everything" rather than NaN minutes. */
+function clampMinutes(value: string): number {
+  const minutes = Number(value)
+  if (!Number.isFinite(minutes)) return 0
+  return Math.max(0, Math.min(120, Math.round(minutes)))
 }

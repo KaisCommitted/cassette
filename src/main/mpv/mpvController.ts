@@ -26,6 +26,7 @@ interface RawTrack {
   lang?: string
   codec?: string
   selected?: boolean
+  'external-filename'?: string
 }
 
 function emptyState(): PlaybackState {
@@ -247,9 +248,45 @@ export class MpvController extends EventEmitter {
     await this.send(['set_property', 'sub-delay', ms / 1000])
   }
 
-  /** Adds an external subtitle file and selects it. */
-  async addSubtitleFile(path: string, title?: string): Promise<void> {
-    await this.send(['sub-add', path, 'select', title ?? basename(path)])
+  /**
+   * Adds an external subtitle file as a track.
+   *
+   * `select` is deliberately optional and off by default. Adding several files
+   * — one per language — with the default flag would leave whichever happened
+   * to be added last switched on, throwing away the track that was chosen for
+   * the user's preferred language a moment earlier.
+   */
+  async addSubtitleFile(
+    path: string,
+    title?: string,
+    lang?: string | null,
+    select = false
+  ): Promise<void> {
+    const args: unknown[] = ['sub-add', path, select ? 'select' : 'auto', title ?? basename(path)]
+    if (lang) args.push(lang)
+    await this.send(args)
+  }
+
+  /**
+   * Re-reads the track list rather than waiting for mpv to announce it.
+   *
+   * Adding a subtitle file and immediately choosing between tracks would
+   * otherwise race the property update and decide without the new track.
+   */
+  async refreshTracks(): Promise<TrackInfo[]> {
+    const raw = await this.send<RawTrack[]>(['get_property', 'track-list'])
+    this.state.tracks = Array.isArray(raw) ? mapTracks(raw) : this.state.tracks
+    this.emit('state', this.getState())
+    return this.getState().tracks
+  }
+
+  /** Subtitle files mpv has loaded from disk, by path, lowercased. */
+  loadedSubtitlePaths(): Set<string> {
+    return new Set(
+      this.state.tracks
+        .filter((t) => t.type === 'sub' && t.externalFilename)
+        .map((t) => t.externalFilename!.toLowerCase())
+    )
   }
 
   async nextChapter(): Promise<void> {
@@ -353,7 +390,8 @@ function mapTracks(raw: RawTrack[]): TrackInfo[] {
       title: t.title ?? null,
       lang: t.lang ?? null,
       codec: t.codec ?? null,
-      selected: t.selected === true
+      selected: t.selected === true,
+      externalFilename: t['external-filename'] ?? null
     }))
 }
 

@@ -54,6 +54,7 @@ const api: CassetteApi = {
   markWatched: (key, watched) => invoke(IPC.markWatched, key, watched),
   resumeSeries: (seriesId) => invoke(IPC.resumeSeries, seriesId),
   scanSubtitles: (scope) => invoke(IPC.scanSubtitles, scope),
+  findSubtitlesNow: () => invoke(IPC.findSubtitlesNow),
   listLocalSubtitles: () => invoke(IPC.listLocalSubtitles),
   useSubtitleFile: (path) => invoke(IPC.useSubtitleFile, path),
   setSleepTimer: (seconds) => invoke(IPC.setSleepTimer, seconds),

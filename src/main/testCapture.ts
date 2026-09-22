@@ -19,6 +19,25 @@ export function scheduleTestCapture(window: BrowserWindow): void {
     void (async () => {
       if (window.isDestroyed()) return
       try {
+        // Lets a check look at a screen other than the one the app opens on,
+        // named by the rail link that reaches it.
+        const nav = process.env.CASSETTE_CAPTURE_NAV
+        if (nav) {
+          await window.webContents.executeJavaScript(
+            `[...document.querySelectorAll('.rail-link')]
+               .find((b) => b.textContent.trim().startsWith(${JSON.stringify(nav)}))?.click()`
+          )
+          await new Promise((resolve) => setTimeout(resolve, 600))
+        }
+
+        // Anything below the fold needs the page moved to it first.
+        const scroll = process.env.CASSETTE_CAPTURE_SCROLL
+        if (scroll) {
+          await window.webContents.executeJavaScript(
+            `document.querySelector('.main')?.scrollTo(0, ${Number(scroll) || 0})`
+          )
+          await new Promise((resolve) => setTimeout(resolve, 400))
+        }
         const image = await window.webContents.capturePage()
         await writeFile(target, image.toPNG())
         console.log(`[capture] wrote ${target}`)
