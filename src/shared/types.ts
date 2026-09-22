@@ -96,3 +96,33 @@ export const MEDIA_EXTENSIONS = [
 
 /** Fraction of duration past which an item counts as watched. */
 export const FINISHED_THRESHOLD = 0.9
+
+export interface MininetflixApi {
+  chooseFolder: () => Promise<string | null>
+  getSettings: () => Promise<Settings>
+  setRoots: (roots: string[]) => Promise<Library>
+  getLibrary: () => Promise<Library | null>
+  rescan: () => Promise<Library>
+  getProgress: () => Promise<ProgressRecord[]>
+  play: (path: string, key: string) => Promise<void>
+  stop: () => Promise<void>
+  onPlaybackState: (cb: (s: PlaybackState) => void) => () => void
+}
+
+declare global {
+  interface Window {
+    mininetflix: MininetflixApi
+  }
+}
+
+export const IPC = {
+  chooseFolder: 'app:chooseFolder',
+  getSettings: 'app:getSettings',
+  setRoots: 'app:setRoots',
+  getLibrary: 'app:getLibrary',
+  rescan: 'app:rescan',
+  getProgress: 'app:getProgress',
+  play: 'player:play',
+  stop: 'player:stop',
+  playbackState: 'player:state'
+} as const
