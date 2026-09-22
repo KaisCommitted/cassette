@@ -1,13 +1,32 @@
-import { app, BrowserWindow } from 'electron'
-import { IPC, type PlaybackState } from '@shared/types'
+import { app, BrowserWindow, Menu } from 'electron'
+import { IPC, type Library, type PlaybackState } from '@shared/types'
 import { describeKey, resolveBinding } from './input/resolveBinding'
-import { registerHandlers, type AppContext } from './ipc/handlers'
+import { findNext, findPrevious } from './library/playQueue'
+import { playItem, registerHandlers, stopPlayback, type AppContext } from './ipc/handlers'
 import { MpvController } from './mpv/mpvController'
 import { ProgressStore } from './state/progressStore'
 import { SettingsStore } from './state/settingsStore'
-import { progressFile, settingsFile } from './state/paths'
+import { readJson } from './state/atomicJson'
+import { libraryFile, progressFile, settingsFile } from './state/paths'
 import { createMainWindow } from './windows/mainWindow'
 import { createOverlayWindow } from './windows/overlayWindow'
+import { createVideoWindow } from './windows/videoWindow'
+import { createOverlayInteraction } from './windows/overlayInteraction'
+
+/**
+ * mpv draws into a native child window, but Chromium presents through
+ * DirectComposition, whose visual tree is composited independently of ordinary
+ * child windows — so mpv's picture never reached the screen and playback was
+ * audio over an empty window. Turning DirectComposition off puts Chromium back
+ * on a normal swapchain and restores the usual child-window z-order.
+ *
+ * This is far narrower than disabling hardware acceleration outright, which
+ * also stopped the app's own windows painting.
+ */
+app.commandLine.appendSwitch('disable-direct-composition')
+
+// The stock Edit/View/Window menu is meaningless here and steals vertical space.
+Menu.setApplicationMenu(null)
 
 let ctx: AppContext | null = null
 
@@ -18,16 +37,32 @@ async function bootstrap(): Promise<void> {
   await progress.load()
 
   const mainWindow = createMainWindow()
+  // Order matters: the video window must be created before the overlay so the
+  // overlay's always-on-top level puts the controls above the picture.
+  const videoWindow = createVideoWindow(mainWindow)
   const overlayWindow = createOverlayWindow(mainWindow)
+  const overlayInteraction = createOverlayInteraction(mainWindow, overlayWindow)
   const mpv = new MpvController()
 
   // Handlers must be registered before the renderer mounts and starts calling
   // them. Starting mpv takes hundreds of milliseconds, so it must not come
   // first — the renderer's initial getLibrary() would arrive with no handler.
-  ctx = { settings, progress, mpv, mainWindow, overlayWindow, currentKey: null }
+  ctx = {
+    settings,
+    progress,
+    mpv,
+    mainWindow,
+    videoWindow,
+    overlayWindow,
+    overlayInteraction,
+    currentKey: null,
+    library: await readJson<Library | null>(libraryFile(), null)
+  }
   registerHandlers(ctx)
 
-  await mpv.start(mainWindow.getNativeWindowHandle())
+  // mpv renders into its own window: embedding it in the main window's handle
+  // leaves the video invisible, because Chromium's compositor paints over it.
+  await mpv.start(videoWindow.getNativeWindowHandle())
 
   async function runAction(action: string): Promise<void> {
     const state = mpv.getState()
@@ -56,14 +91,27 @@ async function bootstrap(): Promise<void> {
         return mpv.adjustSubtitleDelay(-50)
       case 'subtitleDelayUp':
         return mpv.adjustSubtitleDelay(50)
-      case 'toggleFullscreen':
-        mainWindow.setFullScreen(!mainWindow.isFullScreen())
+      case 'nextEpisode':
+        if (ctx?.library && ctx.currentKey) {
+          const next = findNext(ctx.library, ctx.currentKey)
+          if (next) await playItem(ctx, next)
+        }
         return
+      case 'previousEpisode':
+        if (ctx?.library && ctx.currentKey) {
+          const previous = findPrevious(ctx.library, ctx.currentKey)
+          if (previous) await playItem(ctx, previous)
+        }
+        return
+      case 'toggleFullscreen': {
+        const next = !mainWindow.isFullScreen()
+        mainWindow.setFullScreen(next)
+        mpv.setFullscreen(next)
+        return
+      }
       case 'stop':
-        await mpv.stop()
-        if (ctx) ctx.currentKey = null
-        overlayWindow.hide()
-        await progress.save()
+        if (!state.path) return
+        if (ctx) await stopPlayback(ctx)
         return
       default:
         return
@@ -87,6 +135,22 @@ async function bootstrap(): Promise<void> {
     void runAction(action)
   })
 
+  // Auto-advance: when an episode finishes, roll into the next one.
+  mpv.on('end-file', () => {
+    void (async () => {
+      if (!ctx?.library || !ctx.currentKey) return
+      const finishedKey = ctx.currentKey
+      const state = mpv.getState()
+      // Only advance on a genuine end, not on a stop or a replace-load.
+      if (state.durationSeconds > 0 && state.positionSeconds < state.durationSeconds - 5) {
+        return
+      }
+      const next = findNext(ctx.library, finishedKey)
+      if (next) await playItem(ctx, next)
+      else await stopPlayback(ctx)
+    })()
+  })
+
   // Persist position on a 5-second debounce while playing.
   let lastSaved = 0
   mpv.on('state', (state: PlaybackState) => {
@@ -94,7 +158,7 @@ async function bootstrap(): Promise<void> {
       overlayWindow.webContents.send(IPC.playbackState, state)
     }
     const key = ctx?.currentKey
-    if (!key || state.durationSeconds <= 0) return
+    if (!key || state.durationSeconds <= 0 || state.loading) return
     progress.record(key, state.positionSeconds, state.durationSeconds)
     const now = Date.now()
     if (now - lastSaved >= 5000) {
@@ -102,6 +166,26 @@ async function bootstrap(): Promise<void> {
       void progress.save()
     }
   })
+
+  // Leaving fullscreen with Escape is a Windows convention; keep state in sync.
+  mainWindow.on('leave-full-screen', () => mpv.setFullscreen(false))
+  mainWindow.on('enter-full-screen', () => mpv.setFullscreen(true))
+
+  // MNF_AUTOPLAY starts the first episode unattended, so rendering can be
+  // verified by screen capture without a person driving the UI.
+  if (process.env.MNF_AUTOPLAY === '1') {
+    void (async () => {
+      const { scanLibrary } = await import('./library/scanner')
+      const roots = settings.get().libraryRoots
+      const library =
+        ctx?.library ?? (roots.length > 0 ? await scanLibrary(roots) : null)
+      if (!library || !ctx) return
+      ctx.library = library
+      const { flattenPlayable } = await import('./library/playQueue')
+      const first = flattenPlayable(library)[0]
+      if (first) await playItem(ctx, first)
+    })()
+  }
 }
 
 void app.whenReady().then(bootstrap)

@@ -1,49 +1,93 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PlaybackState } from '@shared/types'
+import { ControlBar } from './ControlBar'
 
-function formatTime(seconds: number): string {
-  const s = Math.max(0, Math.floor(seconds))
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  const sec = s % 60
-  const mm = String(m).padStart(2, '0')
-  const ss = String(sec).padStart(2, '0')
-  return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`
-}
+/** Controls fade out after this long without pointer movement. */
+const IDLE_HIDE_MS = 2600
 
 export function Overlay() {
   const [state, setState] = useState<PlaybackState | null>(null)
+  const [visible, setVisible] = useState(true)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => window.mininetflix.onPlaybackState(setState), [])
 
-  if (!state?.path) return null
+  const playing = Boolean(state?.path)
 
-  const pct =
-    state.durationSeconds > 0 ? (state.positionSeconds / state.durationSeconds) * 100 : 0
+  const wake = useCallback(() => {
+    setVisible(true)
+    if (hideTimer.current) clearTimeout(hideTimer.current)
+    hideTimer.current = setTimeout(() => setVisible(false), IDLE_HIDE_MS)
+  }, [])
+
+  // Cursor movement is reported by the main process rather than read from DOM
+  // events: this window is click-through and non-focusable, so forwarded mouse
+  // moves never reach it and the controls would stay hidden forever.
+  useEffect(() => {
+    if (!playing) return
+    const off = window.mininetflix.onOverlayActivity(wake)
+    wake()
+    return () => {
+      off()
+      if (hideTimer.current) clearTimeout(hideTimer.current)
+    }
+  }, [playing, wake])
+
+  // Keep the controls up while a menu is open, or it closes under the cursor.
+  const shown = playing && (visible || menuOpen || Boolean(state?.paused))
+
+  if (!state?.path) return null
 
   return (
     <div
       style={{
         position: 'fixed',
-        inset: 'auto 0 0 0',
-        padding: '16px 24px',
-        background: 'linear-gradient(transparent, rgba(0,0,0,0.85))',
-        color: '#fff',
-        fontFamily: 'system-ui',
-        pointerEvents: 'none'
+        inset: 0,
+        pointerEvents: 'none',
+        cursor: shown ? 'default' : 'none',
+        fontFamily:
+          'Inter, "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif'
       }}
     >
-      <div style={{ fontSize: 15, marginBottom: 8 }}>{state.title}</div>
-      <div style={{ height: 4, background: 'rgba(255,255,255,0.25)', borderRadius: 2 }}>
+      {state.loading && <LoadingBadge label={state.label} />}
+      <ControlBar
+        state={state}
+        shown={shown}
+        onMenuOpenChange={setMenuOpen}
+        onActivity={wake}
+      />
+    </div>
+  )
+}
+
+function LoadingBadge({ label }: { label: string }) {
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        display: 'grid',
+        placeItems: 'center',
+        background: 'rgba(8,8,11,0.82)',
+        color: '#f4f4f6'
+      }}
+    >
+      <div style={{ textAlign: 'center' }}>
         <div
-          style={{ height: 4, width: `${pct}%`, background: '#e50914', borderRadius: 2 }}
+          style={{
+            width: 34,
+            height: 34,
+            margin: '0 auto 14px',
+            borderRadius: '50%',
+            border: '3px solid rgba(255,255,255,0.18)',
+            borderTopColor: '#e50914',
+            animation: 'mnf-spin 0.8s linear infinite'
+          }}
         />
+        <div style={{ fontSize: 14, letterSpacing: 0.2, opacity: 0.85 }}>{label}</div>
       </div>
-      <div style={{ fontSize: 12, opacity: 0.8, marginTop: 6 }}>
-        {formatTime(state.positionSeconds)} / {formatTime(state.durationSeconds)}
-        {state.paused ? ' — paused' : ''}
-        {state.subtitleDelayMs !== 0 ? ` — sub ${state.subtitleDelayMs}ms` : ''}
-      </div>
+      <style>{`@keyframes mnf-spin { to { transform: rotate(360deg) } }`}</style>
     </div>
   )
 }

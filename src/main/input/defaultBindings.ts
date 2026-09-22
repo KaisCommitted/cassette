@@ -16,5 +16,7 @@ export const DEFAULT_BINDINGS: Record<string, string> = {
   'key:b': 'cycleAudioTrack',
   'key:g': 'subtitleDelayDown',
   'key:h': 'subtitleDelayUp',
+  'key:n': 'nextEpisode',
+  'key:p': 'previousEpisode',
   'key:Escape': 'stop'
 }

@@ -16,6 +16,27 @@ export function hwndToNumber(handle: Buffer): string {
   return handle.readBigUInt64LE(0).toString()
 }
 
+/**
+ * Video output flags.
+ *
+ * mpv draws into a child window of an Electron window. A flip-model swapchain
+ * there is presented independently of the parent and never reaches the screen,
+ * which showed up as playback running with audio over an empty window. Bitblt
+ * presentation draws into the window itself, so it composites like any other
+ * child window.
+ *
+ * This works together with `disable-direct-composition` in the main process;
+ * both are needed, and neither is sufficient alone.
+ */
+function videoOutputArgs(): string[] {
+  return ['--d3d11-flip=no']
+}
+
+/** Test runs play silently so they do not interrupt whatever else is going on. */
+function testArgs(): string[] {
+  return process.env.MNF_TEST === '1' ? ['--mute=yes', '--volume=0'] : []
+}
+
 export interface MpvProcess {
   child: ChildProcess
   socket: Duplex
@@ -43,12 +64,17 @@ export async function startMpv(hwnd: Buffer): Promise<MpvProcess> {
       '--force-window=yes',
       '--keep-open=no',
       '--hwdec=auto-safe',
+      ...videoOutputArgs(),
       '--no-input-default-bindings',
       '--input-vo-keyboard=no',
       '--input-cursor=no',
       '--osc=no',
       '--no-osd-bar',
-      '--sub-auto=fuzzy'
+      '--sub-auto=fuzzy',
+      ...testArgs(),
+      ...(process.env.MNF_MPV_LOG === '1'
+        ? ['--msg-level=all=v', `--log-file=${process.env.TEMP}\\mnf-mpv.log`]
+        : [])
     ],
     { stdio: 'ignore' }
   )

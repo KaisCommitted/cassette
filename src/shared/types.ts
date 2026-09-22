@@ -69,15 +69,36 @@ export interface Settings {
   tmdbApiKey: string | null
 }
 
+export interface TrackInfo {
+  id: number
+  type: 'video' | 'audio' | 'sub'
+  title: string | null
+  lang: string | null
+  codec: string | null
+  selected: boolean
+}
+
 /** Playback state pushed from main to the overlay as mpv reports changes. */
 export interface PlaybackState {
   path: string | null
   title: string
+  /** Human label for the current item, e.g. "The Mentalist — S03E16". */
+  label: string
   paused: boolean
   positionSeconds: number
   durationSeconds: number
   volume: number
+  muted: boolean
+  speed: number
   subtitleDelayMs: number
+  fullscreen: boolean
+  tracks: TrackInfo[]
+  subtitleTrackId: number | null
+  audioTrackId: number | null
+  hasNext: boolean
+  hasPrevious: boolean
+  /** True while mpv is loading a file, so the UI can show a spinner. */
+  loading: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -104,9 +125,27 @@ export interface MininetflixApi {
   getLibrary: () => Promise<Library | null>
   rescan: () => Promise<Library>
   getProgress: () => Promise<ProgressRecord[]>
+
   play: (path: string, key: string) => Promise<void>
   stop: () => Promise<void>
+  togglePause: () => Promise<void>
+  seekAbsolute: (seconds: number) => Promise<void>
+  seekRelative: (seconds: number) => Promise<void>
+  setVolume: (volume: number) => Promise<void>
+  toggleMute: () => Promise<void>
+  setSpeed: (speed: number) => Promise<void>
+  setSubtitleTrack: (id: number | null) => Promise<void>
+  setAudioTrack: (id: number) => Promise<void>
+  setSubtitleDelay: (ms: number) => Promise<void>
+  nextEpisode: () => Promise<void>
+  previousEpisode: () => Promise<void>
+  toggleFullscreen: () => Promise<void>
+
+  /** Lets the click-through overlay accept clicks while over its controls. */
+  setOverlayInteractive: (interactive: boolean) => void
   onPlaybackState: (cb: (s: PlaybackState) => void) => () => void
+  /** Fires when the cursor moves over the player, to reveal the controls. */
+  onOverlayActivity: (cb: () => void) => () => void
 }
 
 declare global {
@@ -124,5 +163,19 @@ export const IPC = {
   getProgress: 'app:getProgress',
   play: 'player:play',
   stop: 'player:stop',
+  togglePause: 'player:togglePause',
+  seekAbsolute: 'player:seekAbsolute',
+  seekRelative: 'player:seekRelative',
+  setVolume: 'player:setVolume',
+  toggleMute: 'player:toggleMute',
+  setSpeed: 'player:setSpeed',
+  setSubtitleTrack: 'player:setSubtitleTrack',
+  setAudioTrack: 'player:setAudioTrack',
+  setSubtitleDelay: 'player:setSubtitleDelay',
+  nextEpisode: 'player:next',
+  previousEpisode: 'player:previous',
+  toggleFullscreen: 'player:toggleFullscreen',
+  setOverlayInteractive: 'overlay:setInteractive',
+  overlayActivity: 'overlay:activity',
   playbackState: 'player:state'
 } as const

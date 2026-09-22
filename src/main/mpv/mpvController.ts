@@ -1,29 +1,68 @@
 import { EventEmitter } from 'node:events'
 import { basename } from 'node:path'
-import type { PlaybackState } from '@shared/types'
+import type { PlaybackState, TrackInfo } from '@shared/types'
 import { MpvIpc } from './mpvIpc'
 import { startMpv, type MpvProcess } from './mpvProcess'
 
-const OBSERVED = ['time-pos', 'duration', 'pause', 'volume', 'sub-delay'] as const
+const OBSERVED = [
+  'time-pos',
+  'duration',
+  'pause',
+  'volume',
+  'mute',
+  'speed',
+  'sub-delay',
+  'sid',
+  'aid',
+  'track-list'
+] as const
 
-export class MpvController extends EventEmitter {
-  private proc: MpvProcess | null = null
-  private ipc: MpvIpc | null = null
-  private state: PlaybackState = {
+/** Shape of one entry in mpv's `track-list` property. */
+interface RawTrack {
+  id: number
+  type: string
+  title?: string
+  lang?: string
+  codec?: string
+  selected?: boolean
+}
+
+function emptyState(): PlaybackState {
+  return {
     path: null,
     title: '',
+    label: '',
     paused: true,
     positionSeconds: 0,
     durationSeconds: 0,
     volume: 100,
-    subtitleDelayMs: 0
+    muted: false,
+    speed: 1,
+    subtitleDelayMs: 0,
+    fullscreen: false,
+    tracks: [],
+    subtitleTrackId: null,
+    audioTrackId: null,
+    hasNext: false,
+    hasPrevious: false,
+    loading: false
   }
+}
+
+export class MpvController extends EventEmitter {
+  private proc: MpvProcess | null = null
+  private ipc: MpvIpc | null = null
+  private state: PlaybackState = emptyState()
 
   async start(hwnd: Buffer): Promise<void> {
     this.proc = await startMpv(hwnd)
     this.ipc = new MpvIpc(this.proc.socket)
     this.ipc.on('property', (name: string, value: unknown) => {
       this.onProperty(name, value)
+    })
+    this.ipc.on('event', (event: string) => {
+      // mpv reaching the end of a file is how auto-advance is triggered.
+      if (event === 'end-file') this.emit('end-file')
     })
     for (const name of OBSERVED) await this.ipc.observeProperty(name)
   }
@@ -43,8 +82,23 @@ export class MpvController extends EventEmitter {
       case 'volume':
         this.state.volume = n
         break
+      case 'mute':
+        this.state.muted = value === true
+        break
+      case 'speed':
+        this.state.speed = typeof value === 'number' ? value : 1
+        break
       case 'sub-delay':
         this.state.subtitleDelayMs = Math.round(n * 1000)
+        break
+      case 'sid':
+        this.state.subtitleTrackId = typeof value === 'number' ? value : null
+        break
+      case 'aid':
+        this.state.audioTrackId = typeof value === 'number' ? value : null
+        break
+      case 'track-list':
+        this.state.tracks = Array.isArray(value) ? mapTracks(value as RawTrack[]) : []
         break
       default:
         return
@@ -105,14 +159,27 @@ export class MpvController extends EventEmitter {
    * with "invalid parameter". Seeking after `file-loaded` works on every
    * version and does not depend on argument positions at all.
    */
-  async load(path: string, startSeconds: number): Promise<void> {
-    this.state = { ...this.state, path, title: basename(path), paused: false }
+  async load(path: string, startSeconds: number, label: string): Promise<void> {
+    this.state = {
+      ...this.state,
+      path,
+      title: basename(path),
+      label,
+      paused: false,
+      loading: true,
+      positionSeconds: startSeconds,
+      durationSeconds: 0,
+      tracks: []
+    }
+    this.emit('state', this.getState())
+
     const loaded = this.waitForEvent('file-loaded', 20000)
     await this.send(['loadfile', path, 'replace'])
     await loaded
     if (startSeconds > 0) {
       await this.send(['seek', startSeconds, 'absolute'])
     }
+    this.state.loading = false
     this.emit('state', this.getState())
   }
 
@@ -128,6 +195,11 @@ export class MpvController extends EventEmitter {
     await this.send(['seek', seconds, 'relative'])
   }
 
+  async seekAbsolute(seconds: number): Promise<void> {
+    const clamped = Math.max(0, Math.min(this.state.durationSeconds || seconds, seconds))
+    await this.send(['seek', clamped, 'absolute'])
+  }
+
   async setVolume(volume: number): Promise<void> {
     const clamped = Math.max(0, Math.min(130, volume))
     await this.send(['set_property', 'volume', clamped])
@@ -135,6 +207,11 @@ export class MpvController extends EventEmitter {
 
   async toggleMute(): Promise<void> {
     await this.send(['cycle', 'mute'])
+  }
+
+  async setSpeed(speed: number): Promise<void> {
+    const clamped = Math.max(0.25, Math.min(4, speed))
+    await this.send(['set_property', 'speed', clamped])
   }
 
   async cycleSubtitleTrack(): Promise<void> {
@@ -145,19 +222,45 @@ export class MpvController extends EventEmitter {
     await this.send(['cycle', 'aid'])
   }
 
+  /** `null` turns subtitles off. */
+  async setSubtitleTrack(id: number | null): Promise<void> {
+    await this.send(['set_property', 'sid', id === null ? 'no' : id])
+  }
+
+  async setAudioTrack(id: number): Promise<void> {
+    await this.send(['set_property', 'aid', id])
+  }
+
   async adjustSubtitleDelay(deltaMs: number): Promise<void> {
-    const next = (this.state.subtitleDelayMs + deltaMs) / 1000
-    await this.send(['set_property', 'sub-delay', next])
+    await this.setSubtitleDelay(this.state.subtitleDelayMs + deltaMs)
+  }
+
+  async setSubtitleDelay(ms: number): Promise<void> {
+    await this.send(['set_property', 'sub-delay', ms / 1000])
   }
 
   async stop(): Promise<void> {
     await this.send(['stop'])
-    this.state = { ...this.state, path: null, title: '', paused: true }
+    const volume = this.state.volume
+    const muted = this.state.muted
+    this.state = { ...emptyState(), volume, muted }
+    this.emit('state', this.getState())
+  }
+
+  /** Set by the session layer so the UI can enable next/previous buttons. */
+  setNeighbours(hasPrevious: boolean, hasNext: boolean): void {
+    this.state.hasPrevious = hasPrevious
+    this.state.hasNext = hasNext
+    this.emit('state', this.getState())
+  }
+
+  setFullscreen(fullscreen: boolean): void {
+    this.state.fullscreen = fullscreen
     this.emit('state', this.getState())
   }
 
   getState(): PlaybackState {
-    return { ...this.state }
+    return { ...this.state, tracks: [...this.state.tracks] }
   }
 
   dispose(): void {
@@ -165,4 +268,17 @@ export class MpvController extends EventEmitter {
     this.proc = null
     this.ipc = null
   }
+}
+
+function mapTracks(raw: RawTrack[]): TrackInfo[] {
+  return raw
+    .filter((t) => t.type === 'video' || t.type === 'audio' || t.type === 'sub')
+    .map((t) => ({
+      id: t.id,
+      type: t.type as TrackInfo['type'],
+      title: t.title ?? null,
+      lang: t.lang ?? null,
+      codec: t.codec ?? null,
+      selected: t.selected === true
+    }))
 }
