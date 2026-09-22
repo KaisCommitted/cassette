@@ -1,0 +1,72 @@
+name: Release
+
+# Push a tag like v1.2.3 to build the Windows installer and publish it as a
+# GitHub Release. The app checks this same release feed on launch, so tagging
+# is the whole publish step — see src/main/updater.ts.
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # mpv is not committed: it is a ~120 MB binary and belongs to upstream.
+      # The installer bundles it so the app has no external dependency at
+      # runtime, which means fetching it here rather than at install time.
+      - name: Fetch mpv
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path resources/mpv | Out-Null
+          $release = Invoke-RestMethod -Uri "https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/latest"
+          # The player build, not mpv-dev (headers and import libs, no mpv.exe).
+          $asset = $release.assets |
+            Where-Object { $_.name -like "mpv-x86_64-*.7z" -and $_.name -notlike "*dev*" -and $_.name -notlike "*v3*" } |
+            Select-Object -First 1
+          if (-not $asset) { throw "no mpv build found in the latest release" }
+          Write-Host "Using $($asset.name)"
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile mpv.7z
+          # Windows ships bsdtar, which reads 7z — no extra tool to install.
+          tar -xf mpv.7z -C resources/mpv
+          if (-not (Test-Path resources/mpv/mpv.exe)) { throw "mpv.exe missing after extract" }
+          # Trim what the app never launches, to keep the installer smaller.
+          Remove-Item resources/mpv/mpv.7z -ErrorAction SilentlyContinue
+          Remove-Item resources/mpv/installer -Recurse -ErrorAction SilentlyContinue
+          Remove-Item resources/mpv/doc -Recurse -ErrorAction SilentlyContinue
+          Remove-Item resources/mpv/*.bat -ErrorAction SilentlyContinue
+          Remove-Item resources/mpv/mpv.com -ErrorAction SilentlyContinue
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      # The tag is the source of truth for the version, so the updater compares
+      # against what was actually released rather than whatever is committed.
+      - name: Set version from tag
+        shell: pwsh
+        run: npm pkg set version=$("${{ github.ref_name }}" -replace '^v', '')
+
+      - name: Build renderer and main
+        run: npm run build
+
+      - name: Build and publish the installer
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --win --publish always

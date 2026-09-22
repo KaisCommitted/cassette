@@ -1209,3 +1209,101 @@ button {
 .tile:hover .tile-sub {
   color: #a9b2ba;
 }
+
+/* ============ update pill ============ */
+
+/*
+ * Bottom-left, clear of the player controls, and small enough to ignore. An
+ * update should never feel like it is demanding something mid-episode.
+ */
+.update-pill {
+  position: fixed;
+  left: 20px;
+  bottom: 20px;
+  z-index: 20;
+  display: flex;
+  gap: 12px;
+  width: 340px;
+  padding: 14px 14px 15px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(20, 24, 29, 0.97);
+  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.55);
+  animation: pill-in 320ms cubic-bezier(0.16, 0.84, 0.3, 1) both;
+}
+
+@keyframes pill-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.update-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(232, 163, 61, 0.16);
+  color: var(--lamp);
+}
+
+.update-body {
+  min-width: 0;
+  flex: 1;
+}
+.update-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  margin-bottom: 3px;
+}
+.update-sub {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.update-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 11px;
+}
+.update-actions .btn {
+  padding: 6px 12px;
+  font-size: 12.5px;
+}
+
+.update-bar {
+  height: 4px;
+  margin: 9px 0 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+.update-bar span {
+  display: block;
+  height: 100%;
+  background: var(--lamp);
+  transition: width 240ms ease;
+}
+
+.update-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 4px;
+}
+.update-close:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .update-pill { animation: none; }
+}

@@ -209,6 +209,11 @@ export interface CassetteApi {
   setSleepAfterEpisode: () => Promise<void>
   nextChapter: () => Promise<void>
   previousChapter: () => Promise<void>
+  startUpdateDownload: () => void
+  installUpdate: () => void
+  onUpdateAvailable: (cb: (info: { version: string }) => void) => () => void
+  onUpdateProgress: (cb: (info: { percent: number }) => void) => () => void
+  onUpdateReady: (cb: (info: { version: string }) => void) => () => void
   runInput: (descriptor: string) => void
   getBindings: () => Promise<KeyBindings>
   assignBinding: (descriptor: string, actionId: string) => Promise<KeyBindings>
@@ -264,6 +269,12 @@ export const IPC = {
   nextChapter: 'player:nextChapter',
   previousChapter: 'player:previousChapter',
   subtitleScanProgress: 'subs:progress',
+  updateAvailable: 'update:available',
+  updateProgress: 'update:progress',
+  updateReady: 'update:ready',
+  updateError: 'update:error',
+  startUpdateDownload: 'update:download',
+  installUpdate: 'update:install',
   runInput: 'input:run',
   getBindings: 'input:getBindings',
   assignBinding: 'input:assignBinding',

@@ -12,6 +12,15 @@ import {
 const invoke = <T,>(channel: string, ...args: unknown[]): Promise<T> =>
   ipcRenderer.invoke(channel, ...args) as Promise<T>
 
+/** Subscribes to a main-process event and returns an unsubscribe function. */
+function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
+  const listener = (_e: unknown, payload: T): void => cb(payload)
+  ipcRenderer.on(channel, listener)
+  return () => {
+    ipcRenderer.removeListener(channel, listener)
+  }
+}
+
 const api: CassetteApi = {
   chooseFolder: () => invoke<string | null>(IPC.chooseFolder),
   getSettings: () => invoke<Settings>(IPC.getSettings),
@@ -51,6 +60,12 @@ const api: CassetteApi = {
   setSleepAfterEpisode: () => invoke(IPC.setSleepAfterEpisode),
   nextChapter: () => invoke(IPC.nextChapter),
   previousChapter: () => invoke(IPC.previousChapter),
+
+  startUpdateDownload: () => ipcRenderer.send(IPC.startUpdateDownload),
+  installUpdate: () => ipcRenderer.send(IPC.installUpdate),
+  onUpdateAvailable: (cb) => subscribe(IPC.updateAvailable, cb),
+  onUpdateProgress: (cb) => subscribe(IPC.updateProgress, cb),
+  onUpdateReady: (cb) => subscribe(IPC.updateReady, cb),
 
   runInput: (descriptor) => {
     ipcRenderer.send(IPC.runInput, descriptor)

@@ -37,6 +37,7 @@ import { MetadataStore } from './tmdb/metadataStore'
 import { ArtworkCache } from './tmdb/artworkCache'
 import { serveArtwork } from './tmdb/artProtocol'
 import { registerCustomSchemes } from './protocolSchemes'
+import { initUpdater } from './updater'
 
 /**
  * mpv draws into a native child window, but Chromium presents through
@@ -122,6 +123,8 @@ async function bootstrap(): Promise<void> {
   // TMDB key existed would otherwise stay bare until the user thought to
   // rescan. Missing entries only, so this is a no-op once filled in.
   enrichInBackground(ctx)
+
+  initUpdater(mainWindow)
 
 
   await mpv.start(videoWindow.getNativeWindowHandle())

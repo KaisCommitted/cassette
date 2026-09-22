@@ -11,13 +11,23 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "package": "npm run build && electron-builder --win"
+    "package": "npm run build && electron-builder --win",
+    "release": "npm run build && electron-builder --win --publish always"
   },
   "build": {
     "appId": "com.kaislamine.cassette",
     "productName": "Cassette",
+    "asar": true,
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
     "files": [
-      "out/**/*"
+      "out/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "**/node_modules/uiohook-napi/**"
     ],
     "extraResources": [
       {
@@ -26,9 +36,28 @@
       }
     ],
     "win": {
-      "target": "nsis",
+      "target": [
+        "nsis"
+      ],
       "icon": "build/icon.png"
-    }
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Cassette",
+      "artifactName": "${productName}-Setup.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "KaisCommitted",
+        "repo": "cassette"
+      }
+    ],
+    "npmRebuild": false
   },
   "devDependencies": {
     "@types/node": "^26.6.2",
@@ -43,6 +72,7 @@
     "vitest": "^5.0.1"
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "uiohook-napi": "^1.5.5"

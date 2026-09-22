@@ -4,6 +4,7 @@ import { useLibrary } from './useLibrary'
 import { useAmbient } from './useAmbient'
 import { artUrl } from './components/Art'
 import { continueWatching } from './select'
+import { UpdateBanner } from './components/UpdateBanner'
 import { HomeView } from './views/HomeView'
 import { SeriesView } from './views/SeriesView'
 import { SettingsView } from './views/SettingsView'
@@ -140,10 +141,6 @@ export function App() {
           </button>
         </div>
 
-        <div className="rail-foot">
-          Artwork and episode details from TMDB. This product uses the TMDB API but is
-          not endorsed or certified by TMDB.
-        </div>
       </nav>
 
       {/* Keyed so a view change replays the entrance rather than cutting. */}
@@ -194,6 +191,8 @@ export function App() {
           />
         )}
       </main>
+
+      <UpdateBanner />
     </div>
   )
 }
