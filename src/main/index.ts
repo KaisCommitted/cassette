@@ -57,6 +57,33 @@ import { initUpdater } from './updater'
  */
 app.commandLine.appendSwitch('disable-direct-composition')
 
+/**
+ * One Cassette at a time.
+ *
+ * A second copy is not a harmless duplicate: both write the same settings,
+ * watch history and library files, so whichever saves last wins and the other
+ * one's progress is lost. Both also start their own mpv, and both install the
+ * global hotkey, so the pause-and-hide key fires twice and the two disagree
+ * about what is hidden.
+ *
+ * It is easy to end up here by accident, because that same hotkey hides the
+ * window: an app you cannot see looks like an app you closed, so you launch it
+ * again. Handing the launch to the copy already running turns that mistake
+ * into exactly what was wanted — the window comes back.
+ */
+const isOnlyInstance = app.requestSingleInstanceLock()
+if (!isOnlyInstance) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    const window = ctx?.mainWindow
+    if (!window || window.isDestroyed()) return
+    window.show()
+    if (window.isMinimized()) window.restore()
+    window.focus()
+  })
+}
+
 // Custom schemes must be declared before the app is ready.
 registerCustomSchemes()
 
@@ -393,7 +420,9 @@ async function bootstrap(): Promise<void> {
   }
 }
 
-void app.whenReady().then(bootstrap)
+// Nothing starts in a copy that lost the race: quitting is already under way,
+// and booting anyway would open the very second window this prevents.
+if (isOnlyInstance) void app.whenReady().then(bootstrap)
 
 app.on('window-all-closed', () => app.quit())
 
