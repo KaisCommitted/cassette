@@ -8,6 +8,10 @@ import { extname, join } from 'node:path'
 const MPV = 'resources/mpv/mpv.exe'
 const MEDIA = ['.mkv', '.mp4', '.avi', '.m4v', '.mov', '.webm']
 const root = process.argv[2]
+if (!root) {
+  console.error('Usage: node scripts/probe-subs.mjs "C:\\\\path\\\\to\\\\library"')
+  process.exit(1)
+}
 
 async function walk(dir, out = []) {
   let entries
