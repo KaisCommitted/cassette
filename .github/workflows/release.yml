@@ -13,7 +13,30 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  # electron-builder uploads the installer, its blockmap and latest.yml as
+  # near-simultaneous requests. With no release to attach to, each upload
+  # independently tries to create one — the log shows "creating GitHub release"
+  # twice — and the job can finish before the largest upload does, leaving a
+  # draft holding only the small files. Pre-creating an empty draft means every
+  # upload finds it already there and simply attaches.
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pre-create the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "${{ github.ref_name }}" --repo "${{ github.repository }}" >/dev/null 2>&1 \
+            || gh release create "${{ github.ref_name }}" \
+                 --repo "${{ github.repository }}" \
+                 --draft \
+                 --title "${{ github.ref_name }}" \
+                 --notes ""
+
+  build:
+    needs: create-release
     runs-on: windows-latest
 
     steps:
@@ -42,7 +65,6 @@ jobs:
           tar -xf mpv.7z -C resources/mpv
           if (-not (Test-Path resources/mpv/mpv.exe)) { throw "mpv.exe missing after extract" }
           # Trim what the app never launches, to keep the installer smaller.
-          Remove-Item resources/mpv/mpv.7z -ErrorAction SilentlyContinue
           Remove-Item resources/mpv/installer -Recurse -ErrorAction SilentlyContinue
           Remove-Item resources/mpv/doc -Recurse -ErrorAction SilentlyContinue
           Remove-Item resources/mpv/*.bat -ErrorAction SilentlyContinue
@@ -70,3 +92,30 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --win --publish always
+
+      # electron-builder reports success once it has handed the uploads off, so
+      # confirm the installer and the update manifest actually landed rather
+      # than trusting the exit code.
+      - name: Verify the release has everything the updater needs
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $names = gh release view "${{ github.ref_name }}" --repo "${{ github.repository }}" --json assets --jq '.assets[].name'
+          Write-Host "Assets: $names"
+          foreach ($required in @('Cassette-Setup.exe', 'latest.yml')) {
+            if ($names -notcontains $required) { throw "$required is missing from the release" }
+          }
+
+  # electron-builder leaves the release in draft; publishing it is what makes
+  # it show up as "latest", which is what the updater actually reads.
+  finalize-release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${{ github.ref_name }}" --repo "${{ github.repository }}" --draft=false
