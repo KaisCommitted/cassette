@@ -76,3 +76,6 @@ export const libraryFile = (): string => join(dataDir(), 'library.json')
 export const cacheDir = (): string => join(dataDir(), 'cache')
 export const thumbsDir = (): string => join(cacheDir(), 'thumbs')
 export const keybindsFile = (): string => join(dataDir(), 'keybinds.json')
+
+export const metadataFile = (): string => join(dataDir(), 'metadata.json')
+export const artDir = (): string => join(cacheDir(), 'art')

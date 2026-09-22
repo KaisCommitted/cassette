@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { KeyBindings, Settings } from '@shared/types'
+import type { KeyBindings, MetadataSnapshot, Settings } from '@shared/types'
 import { useLibrary } from './useLibrary'
 import { HomeView } from './views/HomeView'
 import { SeriesView } from './views/SeriesView'
@@ -13,11 +13,19 @@ export function App() {
   const [query, setQuery] = useState('')
   const [settings, setSettings] = useState<Settings | null>(null)
   const [bindings, setBindings] = useState<KeyBindings>({})
+  const [metadata, setMetadata] = useState<MetadataSnapshot>({
+    series: {},
+    movies: {},
+    episodes: {},
+    pinned: {}
+  })
+  const [metadataBusy, setMetadataBusy] = useState<string | null>(null)
 
   useEffect(() => {
     void (async () => {
       setSettings(await window.cassette.getSettings())
       setBindings(await window.cassette.getBindings())
+      setMetadata(await window.cassette.getMetadata())
     })()
   }, [])
 
@@ -28,6 +36,12 @@ export function App() {
     })
     return off
   }, [refreshProgress])
+
+  // Artwork arrives after a scan, so take the update when it lands.
+  useEffect(() => window.cassette.onMetadataReady((next) => {
+    setMetadata(next)
+    setMetadataBusy(null)
+  }), [])
 
   const play = useCallback((path: string, key: string) => {
     void window.cassette.play(path, key)
@@ -101,6 +115,8 @@ export function App() {
             progress={progress}
             query={query}
             onQueryChange={setQuery}
+            metadata={metadata}
+            metadataBusy={metadataBusy}
             onOpenSeries={(id) => setView({ name: 'series', id })}
             onPlay={play}
           />
@@ -111,6 +127,7 @@ export function App() {
             <SeriesView
               series={series}
               progress={progress}
+              metadata={metadata}
               onBack={() => setView({ name: 'home' })}
               onPlay={play}
               onRefreshProgress={() => void refreshProgress()}

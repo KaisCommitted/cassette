@@ -1,12 +1,18 @@
 import { useEffect, useState } from 'react'
-import type { ProgressRecord, SeriesEntry, SubtitleScanResult } from '@shared/types'
-import { Still } from '../components/Still'
+import type {
+  MetadataSnapshot,
+  ProgressRecord,
+  SeriesEntry,
+  SubtitleScanResult
+} from '@shared/types'
+import { Art, PlayOverlay } from '../components/Art'
 import { ScanLog } from '../components/ScanLog'
 import { describeSeasons, formatRemaining, summariseSeries } from '../select'
 
 export interface SeriesViewProps {
   series: SeriesEntry
   progress: Map<string, ProgressRecord>
+  metadata: MetadataSnapshot
   onBack: () => void
   onPlay: (path: string, key: string) => void
   onRefreshProgress: () => void
@@ -15,6 +21,7 @@ export interface SeriesViewProps {
 export function SeriesView({
   series,
   progress,
+  metadata,
   onBack,
   onPlay,
   onRefreshProgress
@@ -119,6 +126,7 @@ export function SeriesView({
             ? record.positionSeconds / record.durationSeconds
             : 0
         const fileName = episode.file.path.split(/[\\/]/).pop() ?? ''
+        const meta = metadata.episodes[episode.file.key]
 
         return (
           <div
@@ -132,16 +140,26 @@ export function SeriesView({
             }}
           >
             <div className="still">
-              <Still
+              <Art
+                tmdbPath={meta?.stillPath ?? null}
+                kind="still"
                 thumbKey={episode.file.key}
                 alt={episode.label}
-                fraction={fraction}
-                watched={finished}
               />
+              <PlayOverlay />
+              {(fraction > 0 || finished) && (
+                <div
+                  className={finished ? 'card-progress complete' : 'card-progress'}
+                  style={{ width: `${finished ? 100 : fraction * 100}%` }}
+                />
+              )}
             </div>
             <div>
-              <div className="no">{episode.label}</div>
-              <div className="file">{fileName}</div>
+              <div className="no">
+                {episode.label}
+                {meta?.title ? <span className="ep-title">{meta.title}</span> : null}
+              </div>
+              <div className="file">{meta?.overview || fileName}</div>
             </div>
             <div
               className="right"

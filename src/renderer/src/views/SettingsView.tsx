@@ -195,6 +195,16 @@ export function SettingsView({
       <button className="btn" onClick={onResetBindings}>
         Restore VLC defaults
       </button>
+
+      <h2 className="section-title">About</h2>
+      <p className="field-help" style={{ maxWidth: '62ch' }}>
+        Cassette is free and open source, and everything it knows stays on this
+        machine.
+      </p>
+      <p className="field-help" style={{ maxWidth: '62ch' }}>
+        Posters, backdrops and episode details come from TMDB. This product uses
+        the TMDB API but is not endorsed or certified by TMDB.
+      </p>
     </>
   )
 }

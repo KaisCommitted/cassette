@@ -39,6 +39,7 @@ export function createMainWindow(): BrowserWindow {
   })
   win.once('ready-to-show', () => win.show())
 
+
   if (process.env.ELECTRON_RENDERER_URL) {
     void win.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {

@@ -8,7 +8,13 @@ import { findNext, findPrevious } from './library/playQueue'
 import { SleepTimer } from './player/sleepTimer'
 import { chooseAudioTrack, chooseSubtitleTrack } from './player/trackChoice'
 import { findLocalSubtitles } from './subs/localSubtitles'
-import { playItem, registerHandlers, stopPlayback, type AppContext } from './ipc/handlers'
+import {
+  enrichInBackground,
+  playItem,
+  registerHandlers,
+  stopPlayback,
+  type AppContext
+} from './ipc/handlers'
 import { MpvController } from './mpv/mpvController'
 import { ProgressStore } from './state/progressStore'
 import { SettingsStore } from './state/settingsStore'
@@ -26,7 +32,11 @@ import { createOverlayWindow } from './windows/overlayWindow'
 import { createVideoWindow } from './windows/videoWindow'
 import { createOverlayInteraction } from './windows/overlayInteraction'
 import { ThumbnailService } from './thumbs/thumbnails'
-import { registerThumbProtocolSchemes, serveThumbnails } from './thumbs/thumbProtocol'
+import { serveThumbnails } from './thumbs/thumbProtocol'
+import { MetadataStore } from './tmdb/metadataStore'
+import { ArtworkCache } from './tmdb/artworkCache'
+import { serveArtwork } from './tmdb/artProtocol'
+import { registerCustomSchemes } from './protocolSchemes'
 
 /**
  * mpv draws into a native child window, but Chromium presents through
@@ -42,7 +52,7 @@ import { registerThumbProtocolSchemes, serveThumbnails } from './thumbs/thumbPro
 app.commandLine.appendSwitch('disable-direct-composition')
 
 // Custom schemes must be declared before the app is ready.
-registerThumbProtocolSchemes()
+registerCustomSchemes()
 
 // The stock Edit/View/Window menu is meaningless here and steals vertical space.
 Menu.setApplicationMenu(null)
@@ -59,7 +69,8 @@ async function bootstrap(): Promise<void> {
   const settings = new SettingsStore(settingsFile())
   const progress = new ProgressStore(progressFile())
   const bindings = new BindingsStore(keybindsFile())
-  await Promise.all([settings.load(), progress.load(), bindings.load()])
+  const metadata = new MetadataStore()
+  await Promise.all([settings.load(), progress.load(), bindings.load(), metadata.load()])
 
   const mainWindow = createMainWindow()
   // Order matters: the video window must exist before the overlay so the
@@ -92,6 +103,7 @@ async function bootstrap(): Promise<void> {
     progress,
     mpv,
     bindings,
+    metadata,
     sleepTimer,
     publishSessionFlags,
     onSettingsChanged: () => publishSessionFlags(),
@@ -104,6 +116,13 @@ async function bootstrap(): Promise<void> {
   }
   registerHandlers(ctx)
   serveThumbnails(new ThumbnailService(), () => ctx?.library ?? null)
+  serveArtwork(new ArtworkCache())
+
+  // Artwork on launch, not only after a rescan: a library scanned before a
+  // TMDB key existed would otherwise stay bare until the user thought to
+  // rescan. Missing entries only, so this is a no-op once filled in.
+  enrichInBackground(ctx)
+
 
   await mpv.start(videoWindow.getNativeWindowHandle())
 

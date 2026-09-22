@@ -3,7 +3,8 @@ import { pathToFileURL } from 'node:url'
 import type { Library } from '@shared/types'
 import type { ThumbnailService } from './thumbnails'
 
-export const THUMB_SCHEME = 'cassette-thumb'
+import { THUMB_SCHEME } from '../protocolSchemes'
+export { THUMB_SCHEME }
 
 /**
  * Serves generated stills to the renderer over `cassette-thumb://<key>`.
@@ -14,12 +15,6 @@ export const THUMB_SCHEME = 'cassette-thumb'
  * generates it on demand, so the UI just points at a URL and the still
  * appears when it is ready.
  */
-export function registerThumbProtocolSchemes(): void {
-  // Must run before app.whenReady().
-  protocol.registerSchemesAsPrivileged([
-    { scheme: THUMB_SCHEME, privileges: { standard: true, supportFetchAPI: true } }
-  ])
-}
 
 export function serveThumbnails(
   thumbnails: ThumbnailService,

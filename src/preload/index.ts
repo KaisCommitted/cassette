@@ -3,6 +3,7 @@ import {
   IPC,
   type Library,
   type CassetteApi,
+  type MetadataSnapshot,
   type PlaybackState,
   type ProgressRecord,
   type Settings
@@ -39,6 +40,8 @@ const api: CassetteApi = {
   },
 
   updateSettings: (changes) => invoke(IPC.updateSettings, changes),
+  getMetadata: () => invoke(IPC.getMetadata),
+  refreshMetadata: (force) => invoke(IPC.refreshMetadata, force),
   markWatched: (key, watched) => invoke(IPC.markWatched, key, watched),
   resumeSeries: (seriesId) => invoke(IPC.resumeSeries, seriesId),
   scanSubtitles: (scope) => invoke(IPC.scanSubtitles, scope),
@@ -61,6 +64,14 @@ const api: CassetteApi = {
     ipcRenderer.on(IPC.playbackState, listener)
     return () => {
       ipcRenderer.removeListener(IPC.playbackState, listener)
+    }
+  },
+
+  onMetadataReady: (cb) => {
+    const listener = (_e: unknown, m: MetadataSnapshot): void => cb(m)
+    ipcRenderer.on(IPC.metadataReady, listener)
+    return () => {
+      ipcRenderer.removeListener(IPC.metadataReady, listener)
     }
   },
 

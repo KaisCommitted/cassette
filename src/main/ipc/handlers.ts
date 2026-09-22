@@ -13,6 +13,8 @@ import type { SettingsStore } from '../state/settingsStore'
 import type { MpvController } from '../mpv/mpvController'
 import type { OverlayInteraction } from '../windows/overlayInteraction'
 import type { BindingsStore } from '../input/bindingsStore'
+import type { MetadataStore } from '../tmdb/metadataStore'
+import { TmdbClient } from '../tmdb/tmdbClient'
 
 export interface AppContext {
   settings: SettingsStore
@@ -23,6 +25,7 @@ export interface AppContext {
   overlayWindow: BrowserWindow
   overlayInteraction: OverlayInteraction
   bindings: BindingsStore
+  metadata: MetadataStore
   sleepTimer: SleepTimer
   /** Pushes timer and autoplay state into the overlay. */
   publishSessionFlags: () => void
@@ -58,6 +61,27 @@ export async function stopPlayback(ctx: AppContext): Promise<void> {
   await ctx.progress.save()
 }
 
+
+/** Fills in artwork after a scan, in the background so browsing is not held up. */
+export function enrichInBackground(ctx: AppContext): void {
+  const token = ctx.settings.get().tmdbApiKey
+  if (!token || !ctx.library) return
+  const library = ctx.library
+  void ctx.metadata
+    .enrich(library, new TmdbClient(token), {
+      onProgress: (progress) => {
+        if (!ctx.mainWindow.isDestroyed()) {
+          ctx.mainWindow.webContents.send(IPC.metadataProgress, progress)
+        }
+      }
+    })
+    .then(() => {
+      if (!ctx.mainWindow.isDestroyed()) {
+        ctx.mainWindow.webContents.send(IPC.metadataReady, ctx.metadata.snapshot())
+      }
+    })
+}
+
 export function registerHandlers(ctx: AppContext): void {
   const handle = (channel: string, fn: (...args: never[]) => unknown): void => {
     ipcMain.handle(channel, (_e, ...args) => (fn as (...a: unknown[]) => unknown)(...args))
@@ -78,6 +102,7 @@ export function registerHandlers(ctx: AppContext): void {
     const library = await scanLibrary(roots)
     await writeJsonAtomic(libraryFile(), library)
     ctx.library = library
+    enrichInBackground(ctx)
     return library
   })
 
@@ -91,6 +116,7 @@ export function registerHandlers(ctx: AppContext): void {
     const library = await scanLibrary(ctx.settings.get().libraryRoots)
     await writeJsonAtomic(libraryFile(), library)
     ctx.library = library
+    enrichInBackground(ctx)
     return library
   })
 
@@ -195,6 +221,22 @@ export function registerHandlers(ctx: AppContext): void {
   handle(IPC.setSleepAfterEpisode, () => {
     ctx.sleepTimer.setAfterEpisode()
     ctx.publishSessionFlags()
+  })
+
+  handle(IPC.getMetadata, () => ctx.metadata.snapshot())
+
+  handle(IPC.refreshMetadata, async (force?: boolean) => {
+    const token = ctx.settings.get().tmdbApiKey
+    if (!token || !ctx.library) return ctx.metadata.snapshot()
+    await ctx.metadata.enrich(ctx.library, new TmdbClient(token), {
+      force: force === true,
+      onProgress: (progress) => {
+        if (!ctx.mainWindow.isDestroyed()) {
+          ctx.mainWindow.webContents.send(IPC.metadataProgress, progress)
+        }
+      }
+    })
+    return ctx.metadata.snapshot()
   })
 
   handle(IPC.getBindings, () => ctx.bindings.all())

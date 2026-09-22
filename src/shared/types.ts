@@ -198,6 +198,8 @@ export interface CassetteApi {
   onPlaybackState: (cb: (s: PlaybackState) => void) => () => void
   /** Runs whatever action a mouse descriptor is bound to. */
   updateSettings: (changes: Partial<Settings>) => Promise<Settings>
+  getMetadata: () => Promise<MetadataSnapshot>
+  refreshMetadata: (force?: boolean) => Promise<MetadataSnapshot>
   markWatched: (key: string, watched: boolean) => Promise<void>
   resumeSeries: (seriesId: string) => Promise<void>
   scanSubtitles: (scope: SubtitleScanScope) => Promise<SubtitleScanResult[]>
@@ -214,6 +216,8 @@ export interface CassetteApi {
 
   /** Fires when the cursor moves over the player, to reveal the controls. */
   onOverlayActivity: (cb: () => void) => () => void
+  /** Fires when artwork finishes downloading after a scan. */
+  onMetadataReady: (cb: (m: MetadataSnapshot) => void) => () => void
 }
 
 declare global {
@@ -246,6 +250,10 @@ export const IPC = {
   setOverlayInteractive: 'overlay:setInteractive',
   overlayActivity: 'overlay:activity',
   updateSettings: 'app:updateSettings',
+  getMetadata: 'tmdb:get',
+  refreshMetadata: 'tmdb:refresh',
+  metadataProgress: 'tmdb:progress',
+  metadataReady: 'tmdb:ready',
   markWatched: 'app:markWatched',
   resumeSeries: 'player:resumeSeries',
   scanSubtitles: 'subs:scan',
@@ -343,4 +351,33 @@ export interface LocalSubtitle {
   path: string
   lang: string | null
   label: string
+}
+
+export interface MediaMetadata {
+  tmdbId: number
+  title: string
+  overview: string
+  posterPath: string | null
+  backdropPath: string | null
+  year: number | null
+  rating: number | null
+}
+
+export interface EpisodeMetadata {
+  title: string
+  overview: string
+  stillPath: string | null
+  runtimeMinutes: number | null
+  airDate: string | null
+}
+
+export interface MetadataSnapshot {
+  /** Keyed by series id. */
+  series: Record<string, MediaMetadata>
+  /** Keyed by movie id. */
+  movies: Record<string, MediaMetadata>
+  /** Keyed by media key, so it survives a rescan. */
+  episodes: Record<string, EpisodeMetadata>
+  /** Manual corrections, never overwritten by a refresh. */
+  pinned: Record<string, number>
 }
