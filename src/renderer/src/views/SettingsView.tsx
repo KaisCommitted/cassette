@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ACTIONS, type KeyBindings, type Settings } from '@shared/types'
+import { SubtitleSettings } from '../components/SubtitleSettings'
 import { describeCaptured, humaniseDescriptor } from '../inputDescriptors'
 
 export interface SettingsViewProps {
@@ -9,6 +10,7 @@ export interface SettingsViewProps {
   onRescan: () => void
   onAssign: (descriptor: string, actionId: string) => void
   onResetBindings: () => void
+  onChangeSettings: (changes: Partial<Settings>) => void
   scanning: boolean
 }
 
@@ -19,6 +21,7 @@ export function SettingsView({
   onRescan,
   onAssign,
   onResetBindings,
+  onChangeSettings,
   scanning
 }: SettingsViewProps) {
   const [listening, setListening] = useState<string | null>(null)
@@ -94,6 +97,62 @@ export function SettingsView({
           size and name, so moving a folder keeps your place.
         </p>
       </div>
+
+      {settings && (
+        <>
+          <h2 className="section-title">Playback</h2>
+          <div className="field">
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={settings.autoplayNext}
+                onChange={(e) => onChangeSettings({ autoplayNext: e.target.checked })}
+              />
+              Play the next episode automatically
+            </label>
+            <p className="field-help">
+              Runs on through a season and into the next one when it finishes. Turn it
+              off to stop after every episode.
+            </p>
+          </div>
+
+          <div className="field">
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={settings.nightAudio}
+                onChange={(e) => onChangeSettings({ nightAudio: e.target.checked })}
+              />
+              Even out loud and quiet scenes
+            </label>
+            <p className="field-help">
+              Lifts quiet dialogue and holds back sudden loud scenes — for watching at
+              low volume without reaching for the remote.
+            </p>
+          </div>
+
+          <SubtitleSettings settings={settings} onChange={onChangeSettings} />
+
+          <h2 className="section-title">Subtitle downloads</h2>
+          <div className="field">
+            <div className="field-label">OpenSubtitles API key</div>
+            <input
+              className="search"
+              type="password"
+              value={settings.openSubtitlesApiKey ?? ''}
+              placeholder="Not set"
+              onChange={(e) =>
+                onChangeSettings({ openSubtitlesApiKey: e.target.value || null })
+              }
+            />
+            <p className="field-help">
+              Needed only to download subtitles that are not already on disk. Without
+              a key, searching still reports which files already have subtitle files
+              beside them. Keys are free from opensubtitles.com.
+            </p>
+          </div>
+        </>
+      )}
 
       <h2 className="section-title">Controls</h2>
       <p className="field-help" style={{ marginBottom: 14 }}>

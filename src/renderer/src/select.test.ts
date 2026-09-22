@@ -70,11 +70,13 @@ describe('continueWatching', () => {
   })
 
   it('puts the most recently watched first', () => {
+    // Across different titles: two episodes of one series collapse to a single
+    // row, so ordering is exercised with a series and a film.
     const progress = new Map([
       ['a', record({ key: 'a', lastWatched: '2026-09-01T00:00:00.000Z' })],
-      ['b', record({ key: 'b', lastWatched: '2026-09-22T00:00:00.000Z' })]
+      ['m1', record({ key: 'm1', lastWatched: '2026-09-22T00:00:00.000Z' })]
     ])
-    expect(continueWatching(library, progress).map((i) => i.key)).toEqual(['b', 'a'])
+    expect(continueWatching(library, progress).map((i) => i.key)).toEqual(['m1', 'a'])
   })
 
   it('includes movies alongside episodes', () => {
@@ -129,5 +131,55 @@ describe('formatRemaining', () => {
 
   it('avoids saying zero minutes', () => {
     expect(formatRemaining(30)).toBe('under a minute left')
+  })
+})
+
+describe('continueWatching — one row per series', () => {
+  it('shows a series once, at the episode you actually stopped on', () => {
+    const progress = new Map([
+      ['a', record({ key: 'a', lastWatched: '2026-03-01T00:00:00.000Z' })],
+      ['b', record({ key: 'b', lastWatched: '2026-09-01T00:00:00.000Z' })]
+    ])
+    const items = continueWatching(library, progress)
+    expect(items).toHaveLength(1)
+    expect(items[0]!.key).toBe('b')
+  })
+
+  it('still lists a film separately from a series', () => {
+    const progress = new Map([
+      ['a', record({ key: 'a', lastWatched: '2026-03-01T00:00:00.000Z' })],
+      ['m1', record({ key: 'm1', lastWatched: '2026-09-01T00:00:00.000Z' })]
+    ])
+    expect(continueWatching(library, progress).map((i) => i.key)).toEqual(['m1', 'a'])
+  })
+
+  it('keeps each series when two are on the go, newest first', () => {
+    // The case from real use: two shows watched months apart, both resumable.
+    const twoShows = {
+      ...library,
+      series: [
+        library.series[0]!,
+        {
+          kind: 'series' as const,
+          id: 'other',
+          title: 'Other Show',
+          year: null,
+          seasons: [
+            {
+              season: 1,
+              episodes: [
+                { file: file('x'), season: 1, episodes: [1], label: 'S01E01' }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    const progress = new Map([
+      ['a', record({ key: 'a', lastWatched: '2026-01-01T00:00:00.000Z' })],
+      ['x', record({ key: 'x', lastWatched: '2026-08-01T00:00:00.000Z' })]
+    ])
+    const items = continueWatching(twoShows, progress)
+    expect(items.map((i) => i.title)).toEqual(['Other Show', 'The Mentalist'])
   })
 })

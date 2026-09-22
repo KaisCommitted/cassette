@@ -1,7 +1,11 @@
 import { BrowserWindow, dialog, ipcMain } from 'electron'
-import { IPC, type Library } from '@shared/types'
+import { IPC, type Library, type Settings } from '@shared/types'
 import { scanLibrary } from '../library/scanner'
 import { findNext, findPrevious, type PlayableItem } from '../library/playQueue'
+import { resumeTarget } from '../library/resume'
+import { findLocalSubtitles } from '../subs/localSubtitles'
+import { scanForSubtitles, type ScanScope } from '../subs/subtitleScan'
+import type { SleepTimer } from '../player/sleepTimer'
 import { libraryFile } from '../state/paths'
 import { readJson, writeJsonAtomic } from '../state/atomicJson'
 import type { ProgressStore } from '../state/progressStore'
@@ -19,6 +23,10 @@ export interface AppContext {
   overlayWindow: BrowserWindow
   overlayInteraction: OverlayInteraction
   bindings: BindingsStore
+  sleepTimer: SleepTimer
+  /** Pushes timer and autoplay state into the overlay. */
+  publishSessionFlags: () => void
+  onSettingsChanged?: (settings: Settings) => void
   /** Key of the file currently loaded, so progress ticks know where to go. */
   currentKey: string | null
   /** Cached library, used to resolve next/previous without re-reading disk. */
@@ -121,6 +129,72 @@ export function registerHandlers(ctx: AppContext): void {
     const next = !ctx.mainWindow.isFullScreen()
     ctx.mainWindow.setFullScreen(next)
     ctx.mpv.setFullscreen(next)
+  })
+
+  handle(IPC.updateSettings, async (changes: Partial<Settings>) => {
+    const next = await ctx.settings.patch(changes)
+    // Appearance and audio changes should show up without restarting playback.
+    if (changes.subtitleStyle) await ctx.mpv.applySubtitleStyle(next.subtitleStyle)
+    if (changes.nightAudio !== undefined) await ctx.mpv.setNightAudio(next.nightAudio)
+    ctx.onSettingsChanged?.(next)
+    return next
+  })
+
+  handle(IPC.markWatched, async (key: string, watched: boolean) => {
+    const existing = ctx.progress.get(key)
+    const duration = existing?.durationSeconds ?? 0
+    if (watched) {
+      // Park the position at the end so Continue Watching drops it and the
+      // next episode becomes the one on offer.
+      ctx.progress.record(key, Math.max(duration, 1), Math.max(duration, 1))
+    } else {
+      ctx.progress.record(key, 0, duration)
+    }
+    await ctx.progress.save()
+  })
+
+  handle(IPC.resumeSeries, async (seriesId: string) => {
+    if (!ctx.library) return
+    const series = ctx.library.series.find((s) => s.id === seriesId)
+    if (!series) return
+    const target = resumeTarget(series, new Map(ctx.progress.all().map((r) => [r.key, r])))
+    if (!target) return
+    await playItem(ctx, {
+      key: target.episode.file.key,
+      path: target.episode.file.path,
+      label: `${series.title} — ${target.episode.label}`,
+      seriesId: series.id
+    })
+  })
+
+  handle(IPC.listLocalSubtitles, async () => {
+    const path = ctx.mpv.getState().path
+    return path ? findLocalSubtitles(path) : []
+  })
+
+  handle(IPC.useSubtitleFile, (path: string) => ctx.mpv.addSubtitleFile(path))
+
+  handle(IPC.scanSubtitles, async (scope: ScanScope) => {
+    if (!ctx.library) return []
+    return scanForSubtitles(ctx.library, scope, ctx.settings.get(), (progress) => {
+      if (!ctx.mainWindow.isDestroyed()) {
+        ctx.mainWindow.webContents.send(IPC.subtitleScanProgress, progress)
+      }
+    })
+  })
+
+  handle(IPC.nextChapter, () => ctx.mpv.nextChapter())
+  handle(IPC.previousChapter, () => ctx.mpv.previousChapter())
+
+  handle(IPC.setSleepTimer, (seconds: number | null) => {
+    if (seconds === null) ctx.sleepTimer.clear()
+    else ctx.sleepTimer.setDuration(seconds)
+    ctx.publishSessionFlags()
+  })
+
+  handle(IPC.setSleepAfterEpisode, () => {
+    ctx.sleepTimer.setAfterEpisode()
+    ctx.publishSessionFlags()
   })
 
   handle(IPC.getBindings, () => ctx.bindings.all())

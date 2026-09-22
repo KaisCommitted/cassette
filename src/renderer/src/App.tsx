@@ -113,6 +113,7 @@ export function App() {
               progress={progress}
               onBack={() => setView({ name: 'home' })}
               onPlay={play}
+              onRefreshProgress={() => void refreshProgress()}
             />
           ) : (
             <p className="empty">That series is no longer in your library.</p>
@@ -129,6 +130,9 @@ export function App() {
               void window.mininetflix
                 .assignBinding(descriptor, actionId)
                 .then(setBindings)
+            }}
+            onChangeSettings={(changes) => {
+              void window.mininetflix.updateSettings(changes).then(setSettings)
             }}
             onResetBindings={() => {
               void window.mininetflix.resetBindings().then(setBindings)

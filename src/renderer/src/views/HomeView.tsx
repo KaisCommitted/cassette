@@ -55,7 +55,11 @@ export function HomeView({
               <button
                 key={item.key}
                 className="card"
-                onClick={() => onPlay(item.path, item.key)}
+                onClick={() =>
+                  item.seriesId
+                    ? void window.mininetflix.resumeSeries(item.seriesId)
+                    : onPlay(item.path, item.key)
+                }
               >
                 <Still thumbKey={item.key} alt={item.title} fraction={item.fraction} />
                 <div className="card-body">

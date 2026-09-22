@@ -64,9 +64,48 @@ export interface ProgressRecord {
   finished: boolean
 }
 
+export interface SubtitleStyle {
+  /** Multiplier on mpv's default subtitle size. */
+  scale: number
+  color: string
+  outlineColor: string
+  outlineSize: number
+  /** 0 = no box behind the text, 1 = solid. */
+  backgroundOpacity: number
+  /** Lifts subtitles off the bottom edge, in percent of video height. */
+  marginPercent: number
+  /**
+   * Restyle embedded ASS/SSA subtitles instead of honouring their own styling.
+   * Off by default: signs and karaoke in styled subtitles look wrong when
+   * forced into a single font.
+   */
+  overrideEmbeddedStyles: boolean
+}
+
 export interface Settings {
   libraryRoots: string[]
   tmdbApiKey: string | null
+  openSubtitlesApiKey: string | null
+  /** Roll into the next episode when one finishes. */
+  autoplayNext: boolean
+  /** Language codes in order of preference, e.g. ['eng', 'fre']. */
+  preferredSubtitleLanguages: string[]
+  preferredAudioLanguages: string[]
+  /** Turn subtitles on automatically when a matching track exists. */
+  autoEnableSubtitles: boolean
+  subtitleStyle: SubtitleStyle
+  /** Even out loud and quiet passages — for watching at low volume. */
+  nightAudio: boolean
+}
+
+export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = {
+  scale: 1,
+  color: '#FFFFFF',
+  outlineColor: '#000000',
+  outlineSize: 2,
+  backgroundOpacity: 0,
+  marginPercent: 0,
+  overrideEmbeddedStyles: false
 }
 
 export interface TrackInfo {
@@ -97,13 +136,26 @@ export interface PlaybackState {
   audioTrackId: number | null
   hasNext: boolean
   hasPrevious: boolean
+  /** Seconds until playback pauses itself, or null when no timer is set. */
+  sleepRemainingSeconds: number | null
+  /** Pause once the current episode ends rather than after a fixed time. */
+  sleepAfterEpisode: boolean
+  autoplayNext: boolean
+  chapterCount: number
   /** True while mpv is loading a file, so the UI can show a spinner. */
   loading: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   libraryRoots: [],
-  tmdbApiKey: null
+  tmdbApiKey: null,
+  openSubtitlesApiKey: null,
+  autoplayNext: true,
+  preferredSubtitleLanguages: ['eng', 'en'],
+  preferredAudioLanguages: ['eng', 'en'],
+  autoEnableSubtitles: true,
+  subtitleStyle: DEFAULT_SUBTITLE_STYLE,
+  nightAudio: false
 }
 
 export const MEDIA_EXTENSIONS = [
@@ -145,6 +197,16 @@ export interface MininetflixApi {
   setOverlayInteractive: (interactive: boolean) => void
   onPlaybackState: (cb: (s: PlaybackState) => void) => () => void
   /** Runs whatever action a mouse descriptor is bound to. */
+  updateSettings: (changes: Partial<Settings>) => Promise<Settings>
+  markWatched: (key: string, watched: boolean) => Promise<void>
+  resumeSeries: (seriesId: string) => Promise<void>
+  scanSubtitles: (scope: SubtitleScanScope) => Promise<SubtitleScanResult[]>
+  listLocalSubtitles: () => Promise<LocalSubtitle[]>
+  useSubtitleFile: (path: string) => Promise<void>
+  setSleepTimer: (seconds: number | null) => Promise<void>
+  setSleepAfterEpisode: () => Promise<void>
+  nextChapter: () => Promise<void>
+  previousChapter: () => Promise<void>
   runInput: (descriptor: string) => void
   getBindings: () => Promise<KeyBindings>
   assignBinding: (descriptor: string, actionId: string) => Promise<KeyBindings>
@@ -183,6 +245,17 @@ export const IPC = {
   toggleFullscreen: 'player:toggleFullscreen',
   setOverlayInteractive: 'overlay:setInteractive',
   overlayActivity: 'overlay:activity',
+  updateSettings: 'app:updateSettings',
+  markWatched: 'app:markWatched',
+  resumeSeries: 'player:resumeSeries',
+  scanSubtitles: 'subs:scan',
+  listLocalSubtitles: 'subs:listLocal',
+  useSubtitleFile: 'subs:use',
+  setSleepTimer: 'player:setSleepTimer',
+  setSleepAfterEpisode: 'player:setSleepAfterEpisode',
+  nextChapter: 'player:nextChapter',
+  previousChapter: 'player:previousChapter',
+  subtitleScanProgress: 'subs:progress',
   runInput: 'input:run',
   getBindings: 'input:getBindings',
   assignBinding: 'input:assignBinding',
@@ -250,4 +323,24 @@ export const DEFAULT_BINDINGS: KeyBindings = {
   'mouse:wheelDown': 'volumeDown',
   'mouse:double': 'toggleFullscreen',
   'key:Ctrl+Alt+Space': 'hideAndPause'
+}
+
+
+export type SubtitleScanScope =
+  | { kind: 'episode'; key: string }
+  | { kind: 'season'; seriesId: string; season: number }
+  | { kind: 'series'; seriesId: string }
+  | { kind: 'movie'; key: string }
+
+export interface SubtitleScanResult {
+  key: string
+  label: string
+  status: 'already-had-one' | 'downloaded' | 'nothing-found' | 'failed'
+  detail?: string
+}
+
+export interface LocalSubtitle {
+  path: string
+  lang: string | null
+  label: string
 }

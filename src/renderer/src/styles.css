@@ -15,6 +15,8 @@
   --text: #e8e6e1;
   --muted: #8a9199;
   --lamp: #e8a33d;
+  --watched: #e03a2f;
+  --watched-dim: #6d2a25;
 
   --rail-width: 212px;
   --gap: 20px;
@@ -235,13 +237,19 @@ button {
   color: #3c454d;
 }
 
-/* Watch progress reads as a lamp-lit seam along the bottom of the still. */
+/*
+ * Watch progress uses the red people already read as "how far through a
+ * video you are", rather than the interface accent.
+ */
 .card-progress {
   position: absolute;
   left: 0;
   bottom: 0;
   height: 3px;
-  background: var(--lamp);
+  background: var(--watched);
+}
+.card-progress.complete {
+  background: var(--watched-dim);
 }
 
 .card-body {
@@ -490,4 +498,123 @@ button {
     transition: none !important;
     animation: none !important;
   }
+}
+
+/* ---------- series header, scan and toggles ---------- */
+
+.series-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+  font-size: 13px;
+  user-select: none;
+}
+.toggle input {
+  appearance: none;
+  width: 34px;
+  height: 19px;
+  border-radius: 99px;
+  background: #2c343c;
+  position: relative;
+  cursor: pointer;
+  transition: background 140ms ease;
+  flex: none;
+}
+.toggle input::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #9aa3ab;
+  transition: transform 140ms ease, background 140ms ease;
+}
+.toggle input:checked {
+  background: var(--lamp);
+}
+.toggle input:checked::after {
+  transform: translateX(15px);
+  background: #171106;
+}
+.toggle input:focus-visible {
+  outline: 2px solid var(--lamp);
+  outline-offset: 2px;
+}
+
+.scan-log {
+  margin-top: 12px;
+  max-width: 720px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  max-height: 260px;
+  overflow-y: auto;
+}
+.scan-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
+}
+.scan-row:last-child {
+  border-bottom: 0;
+}
+.scan-row .status {
+  color: var(--muted);
+  white-space: nowrap;
+}
+.scan-row .status.ok {
+  color: #57b55d;
+}
+.scan-row .status.bad {
+  color: var(--watched);
+}
+
+.range-row {
+  display: grid;
+  grid-template-columns: 170px 1fr 58px;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+.range-row input[type='range'] {
+  accent-color: var(--lamp);
+  cursor: pointer;
+}
+.range-row .value {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.swatch {
+  width: 34px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: none;
+  cursor: pointer;
+}
+
+.sub-preview {
+  margin: 14px 0 6px;
+  padding: 26px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #07080a;
+  text-align: center;
+  max-width: 620px;
 }

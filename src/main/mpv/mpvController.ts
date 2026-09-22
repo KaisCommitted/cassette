@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { basename } from 'node:path'
-import type { PlaybackState, TrackInfo } from '@shared/types'
+import type { PlaybackState, SubtitleStyle, TrackInfo } from '@shared/types'
 import { MpvIpc } from './mpvIpc'
 import { startMpv, type MpvProcess } from './mpvProcess'
 
@@ -14,7 +14,8 @@ const OBSERVED = [
   'sub-delay',
   'sid',
   'aid',
-  'track-list'
+  'track-list',
+  'chapter-list'
 ] as const
 
 /** Shape of one entry in mpv's `track-list` property. */
@@ -45,6 +46,10 @@ function emptyState(): PlaybackState {
     audioTrackId: null,
     hasNext: false,
     hasPrevious: false,
+    sleepRemainingSeconds: null,
+    sleepAfterEpisode: false,
+    autoplayNext: true,
+    chapterCount: 0,
     loading: false
   }
 }
@@ -99,6 +104,9 @@ export class MpvController extends EventEmitter {
         break
       case 'track-list':
         this.state.tracks = Array.isArray(value) ? mapTracks(value as RawTrack[]) : []
+        break
+      case 'chapter-list':
+        this.state.chapterCount = Array.isArray(value) ? value.length : 0
         break
       default:
         return
@@ -239,6 +247,72 @@ export class MpvController extends EventEmitter {
     await this.send(['set_property', 'sub-delay', ms / 1000])
   }
 
+  /** Adds an external subtitle file and selects it. */
+  async addSubtitleFile(path: string, title?: string): Promise<void> {
+    await this.send(['sub-add', path, 'select', title ?? basename(path)])
+  }
+
+  async nextChapter(): Promise<void> {
+    await this.send(['add', 'chapter', 1])
+  }
+
+  async previousChapter(): Promise<void> {
+    await this.send(['add', 'chapter', -1])
+  }
+
+  /**
+   * Applies subtitle appearance.
+   *
+   * `sub-ass-override` is what decides whether this reaches embedded ASS
+   * subtitles at all. Left alone, styled subtitles keep their own fonts and
+   * positioning, which is usually what you want because signs and karaoke are
+   * authored deliberately. Forcing the override restyles them like plain text.
+   */
+  async applySubtitleStyle(style: SubtitleStyle): Promise<void> {
+    await this.send(['set_property', 'sub-scale', style.scale])
+    await this.send(['set_property', 'sub-color', style.color])
+    await this.send(['set_property', 'sub-border-color', style.outlineColor])
+    await this.send(['set_property', 'sub-border-size', style.outlineSize])
+    await this.send([
+      'set_property',
+      'sub-back-color',
+      withAlpha(style.outlineColor === style.color ? '#000000' : '#000000', style.backgroundOpacity)
+    ])
+    // sub-pos counts from the top, so 100 sits on the bottom edge.
+    await this.send(['set_property', 'sub-pos', 100 - Math.round(style.marginPercent)])
+    await this.send([
+      'set_property',
+      'sub-ass-override',
+      style.overrideEmbeddedStyles ? 'force' : 'no'
+    ])
+  }
+
+  /**
+   * Evens out loud and quiet passages.
+   *
+   * Dialogue you cannot hear followed by action that wakes the house is the
+   * usual complaint when watching quietly at night.
+   */
+  async setNightAudio(enabled: boolean): Promise<void> {
+    await this.send([
+      'set_property',
+      'af',
+      enabled ? 'dynaudnorm=g=5:f=250:r=0.9:p=0.5' : ''
+    ])
+  }
+
+  /** Mirrors timer and autoplay state into what the overlay renders. */
+  setSessionFlags(flags: {
+    sleepRemainingSeconds: number | null
+    sleepAfterEpisode: boolean
+    autoplayNext: boolean
+  }): void {
+    this.state.sleepRemainingSeconds = flags.sleepRemainingSeconds
+    this.state.sleepAfterEpisode = flags.sleepAfterEpisode
+    this.state.autoplayNext = flags.autoplayNext
+    this.emit('state', this.getState())
+  }
+
   async stop(): Promise<void> {
     await this.send(['stop'])
     const volume = this.state.volume
@@ -281,4 +355,18 @@ function mapTracks(raw: RawTrack[]): TrackInfo[] {
       codec: t.codec ?? null,
       selected: t.selected === true
     }))
+}
+
+/**
+ * mpv colour with an alpha channel, as `#AARRGGBB`.
+ *
+ * mpv treats alpha as opacity here, so a fully transparent background means
+ * no box is drawn behind the text at all.
+ */
+function withAlpha(hex: string, opacity: number): string {
+  const clamped = Math.max(0, Math.min(1, opacity))
+  const alpha = Math.round(clamped * 255)
+    .toString(16)
+    .padStart(2, '0')
+  return `#${alpha}${hex.replace('#', '')}`
 }

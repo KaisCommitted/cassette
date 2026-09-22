@@ -14,10 +14,12 @@ export interface StillProps {
  *
  * Stills are 16:9 because that is what the source actually is — inventing
  * portrait poster art would mean fabricating something the files do not
- * contain.
+ * contain. The progress seam is red, the colour people already read as how
+ * far through a video they are.
  */
 export function Still({ thumbKey, alt, fraction, watched }: StillProps) {
   const [failed, setFailed] = useState(false)
+  const width = watched ? 100 : Math.min(100, (fraction ?? 0) * 100)
 
   return (
     <div className="card-still">
@@ -34,8 +36,11 @@ export function Still({ thumbKey, alt, fraction, watched }: StillProps) {
 
       {watched && <span className="badge-watched">Watched</span>}
 
-      {fraction !== undefined && fraction > 0 && (
-        <div className="card-progress" style={{ width: `${Math.min(100, fraction * 100)}%` }} />
+      {width > 0 && (
+        <div
+          className={`card-progress${watched ? ' complete' : ''}`}
+          style={{ width: `${width}%` }}
+        />
       )}
     </div>
   )

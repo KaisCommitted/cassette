@@ -5,6 +5,9 @@ import { BindingsStore } from './input/bindingsStore'
 import { GlobalHotkeyMachine } from './input/globalHotkey'
 import { startNativeHook } from './input/nativeHook'
 import { findNext, findPrevious } from './library/playQueue'
+import { SleepTimer } from './player/sleepTimer'
+import { chooseAudioTrack, chooseSubtitleTrack } from './player/trackChoice'
+import { findLocalSubtitles } from './subs/localSubtitles'
 import { playItem, registerHandlers, stopPlayback, type AppContext } from './ipc/handlers'
 import { MpvController } from './mpv/mpvController'
 import { ProgressStore } from './state/progressStore'
@@ -57,11 +60,29 @@ async function bootstrap(): Promise<void> {
   // Handlers must be registered before the renderer mounts and starts calling
   // them. Starting mpv takes hundreds of milliseconds, so it must not come
   // first — the renderer's initial getLibrary() would arrive with no handler.
+  const sleepTimer = new SleepTimer({
+    pause: () => {
+      void mpv.setPaused(true)
+      publishSessionFlags()
+    }
+  })
+
+  const publishSessionFlags = (): void => {
+    mpv.setSessionFlags({
+      sleepRemainingSeconds: sleepTimer.remainingSeconds(),
+      sleepAfterEpisode: sleepTimer.stopsAfterEpisode,
+      autoplayNext: settings.get().autoplayNext
+    })
+  }
+
   ctx = {
     settings,
     progress,
     mpv,
     bindings,
+    sleepTimer,
+    publishSessionFlags,
+    onSettingsChanged: () => publishSessionFlags(),
     mainWindow,
     videoWindow,
     overlayWindow,
@@ -152,6 +173,7 @@ async function bootstrap(): Promise<void> {
       case 'stop':
         if (!state.path) return
         if (ctx) await stopPlayback(ctx)
+        sleepTimer.clear()
         hotkey.clear()
         return
       default:
@@ -205,7 +227,8 @@ async function bootstrap(): Promise<void> {
     void runAction(action)
   })
 
-  // Auto-advance: when an episode finishes, roll into the next one.
+  // Auto-advance: when an episode finishes, roll into the next one. This
+  // crosses season boundaries, because findNext walks the series in order.
   mpv.on('end-file', () => {
     void (async () => {
       if (!ctx?.library || !ctx.currentKey) return
@@ -215,11 +238,63 @@ async function bootstrap(): Promise<void> {
       if (state.durationSeconds > 0 && state.positionSeconds < state.durationSeconds - 5) {
         return
       }
+      // A sleep timer set to "after this episode" wins over autoplay.
+      if (sleepTimer.shouldStopAtEpisodeEnd()) {
+        await mpv.setPaused(true)
+        publishSessionFlags()
+        return
+      }
+      if (!settings.get().autoplayNext) {
+        await stopPlayback(ctx)
+        return
+      }
       const next = findNext(ctx.library, finishedKey)
       if (next) await playItem(ctx, next)
       else await stopPlayback(ctx)
     })()
   })
+
+  /**
+   * Turn on subtitles and the right audio track once a file is ready.
+   *
+   * Release encodes routinely leave no default subtitle track, so mpv would
+   * show none at all unless asked. Matching on the language tags already in
+   * the file means embedded subtitles simply appear.
+   */
+  let autoSelectedFor: string | null = null
+  mpv.on('state', (state: PlaybackState) => {
+    if (!state.path || state.loading || state.tracks.length === 0) return
+    if (autoSelectedFor === state.path) return
+    autoSelectedFor = state.path
+
+    void (async () => {
+      const config = settings.get()
+      await mpv.applySubtitleStyle(config.subtitleStyle)
+      await mpv.setNightAudio(config.nightAudio)
+
+      const audio = chooseAudioTrack(state.tracks, config.preferredAudioLanguages)
+      if (audio !== null) await mpv.setAudioTrack(audio)
+
+      const subtitle = chooseSubtitleTrack(
+        state.tracks,
+        config.preferredSubtitleLanguages,
+        config.autoEnableSubtitles
+      )
+      if (subtitle !== null) await mpv.setSubtitleTrack(subtitle)
+
+      // Pull in any subtitle files sitting beside the video as extra options.
+      const local = await findLocalSubtitles(state.path!)
+      for (const sub of local) {
+        await mpv.addSubtitleFile(sub.path, sub.label).catch(() => undefined)
+      }
+    })()
+  })
+
+  // Keep the countdown on screen ticking.
+  const sleepTick = setInterval(() => {
+    if (sleepTimer.isSet) publishSessionFlags()
+  }, 1000)
+  sleepTick.unref?.()
 
   // Persist position on a 5-second debounce while playing.
   let lastSaved = 0

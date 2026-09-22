@@ -11,7 +11,7 @@ export interface ControlBarProps {
   onActivity: () => void
 }
 
-type MenuId = 'subs' | 'audio' | 'speed' | null
+type MenuId = 'subs' | 'audio' | 'speed' | 'sleep' | null
 
 const api = window.mininetflix
 
@@ -122,6 +122,10 @@ export function ControlBar({
           </Pill>
         )}
         {state.speed !== 1 && <Pill>{state.speed.toFixed(2)}×</Pill>}
+        {state.sleepRemainingSeconds !== null && (
+          <Pill>Sleep in {formatCountdown(state.sleepRemainingSeconds)}</Pill>
+        )}
+        {state.sleepAfterEpisode && <Pill>Stops after this episode</Pill>}
 
         <TextButton active={menu === 'subs'} onClick={() => setMenu(menu === 'subs' ? null : 'subs')}>
           Subtitles
@@ -131,6 +135,9 @@ export function ControlBar({
         </TextButton>
         <TextButton active={menu === 'speed'} onClick={() => setMenu(menu === 'speed' ? null : 'speed')}>
           Speed
+        </TextButton>
+        <TextButton active={menu === 'sleep'} onClick={() => setMenu(menu === 'sleep' ? null : 'sleep')}>
+          Sleep
         </TextButton>
 
         <IconButton label="Fullscreen" onClick={() => void api.toggleFullscreen()}>
@@ -176,6 +183,31 @@ export function ControlBar({
           }))}
           onPick={(id) => {
             void api.setAudioTrack(Number(id))
+            setMenu(null)
+          }}
+        />
+      )}
+
+      {menu === 'sleep' && (
+        <TrackMenu
+          title="Pause playback in"
+          items={[
+            ...[15, 30, 45, 60, 90, 120].map((mins) => ({
+              id: String(mins * 60),
+              label: formatSleepOption(mins),
+              selected: false
+            })),
+            {
+              id: 'episode',
+              label: 'At the end of this episode',
+              selected: state.sleepAfterEpisode
+            },
+            { id: 'off', label: 'Cancel timer', selected: state.sleepRemainingSeconds === null && !state.sleepAfterEpisode }
+          ]}
+          onPick={(id) => {
+            if (id === 'episode') void api.setSleepAfterEpisode()
+            else if (id === 'off') void api.setSleepTimer(null)
+            else void api.setSleepTimer(Number(id))
             setMenu(null)
           }}
         />
@@ -466,4 +498,24 @@ function CloseIcon() {
       <path d="M6 6l12 12M18 6L6 18" />
     </svg>
   )
+}
+
+
+
+/** "1:29:58" while a sleep timer counts down. */
+function formatCountdown(seconds: number): string {
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = seconds % 60
+  const mm = String(m).padStart(2, '0')
+  const ss = String(s).padStart(2, '0')
+  return h > 0 ? h + ':' + mm + ':' + ss : m + ':' + ss
+}
+
+function formatSleepOption(minutes: number): string {
+  if (minutes < 60) return minutes + ' minutes'
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  if (m === 0) return h === 1 ? '1 hour' : h + ' hours'
+  return h + ' h ' + m + ' min'
 }

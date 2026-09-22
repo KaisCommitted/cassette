@@ -1,6 +1,8 @@
 import type { Library, MovieEntry, ProgressRecord, SeriesEntry } from '@shared/types'
 
 export interface ResumeItem {
+  /** Series this belongs to, or null for a film. */
+  seriesId: string | null
   key: string
   path: string
   title: string
@@ -25,6 +27,7 @@ export function continueWatching(
         const record = progress.get(episode.file.key)
         if (!usable(record)) continue
         items.push({
+          seriesId: series.id,
           key: episode.file.key,
           path: episode.file.path,
           title: series.title,
@@ -41,6 +44,7 @@ export function continueWatching(
     const record = progress.get(movie.file.key)
     if (!usable(record)) continue
     items.push({
+      seriesId: null,
       key: movie.file.key,
       path: movie.file.path,
       title: movie.title,
@@ -51,9 +55,21 @@ export function continueWatching(
     })
   }
 
-  return items
-    .sort((a, b) => b.lastWatched.localeCompare(a.lastWatched))
-    .slice(0, limit)
+  const newestFirst = items.sort((a, b) => b.lastWatched.localeCompare(a.lastWatched))
+
+  // One row per series. Half a season of part-watched episodes should not
+  // crowd out everything else — a series belongs in this row once, at the
+  // point you actually stopped.
+  const seen = new Set<string>()
+  const collapsed: ResumeItem[] = []
+  for (const item of newestFirst) {
+    const group = item.seriesId ?? `film:${item.key}`
+    if (seen.has(group)) continue
+    seen.add(group)
+    collapsed.push(item)
+  }
+
+  return collapsed.slice(0, limit)
 }
 
 function usable(record: ProgressRecord | undefined): record is ProgressRecord {

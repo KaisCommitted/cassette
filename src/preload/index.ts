@@ -38,6 +38,17 @@ const api: MininetflixApi = {
     ipcRenderer.send(IPC.setOverlayInteractive, interactive)
   },
 
+  updateSettings: (changes) => invoke(IPC.updateSettings, changes),
+  markWatched: (key, watched) => invoke(IPC.markWatched, key, watched),
+  resumeSeries: (seriesId) => invoke(IPC.resumeSeries, seriesId),
+  scanSubtitles: (scope) => invoke(IPC.scanSubtitles, scope),
+  listLocalSubtitles: () => invoke(IPC.listLocalSubtitles),
+  useSubtitleFile: (path) => invoke(IPC.useSubtitleFile, path),
+  setSleepTimer: (seconds) => invoke(IPC.setSleepTimer, seconds),
+  setSleepAfterEpisode: () => invoke(IPC.setSleepAfterEpisode),
+  nextChapter: () => invoke(IPC.nextChapter),
+  previousChapter: () => invoke(IPC.previousChapter),
+
   runInput: (descriptor) => {
     ipcRenderer.send(IPC.runInput, descriptor)
   },
