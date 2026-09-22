@@ -131,10 +131,19 @@ export class MpvController extends EventEmitter {
   private queue: Promise<unknown> = Promise.resolve()
 
   private send<T>(args: unknown[]): Promise<T> {
+    const label = String(args[0]) + (args[1] !== undefined ? ' ' + String(args[1]) : '')
+    const queuedAt = Date.now()
+    if (process.env.CASSETTE_TRACE === '1') console.log(`[mpv] queued ${label}`)
     const run = this.queue.then(
       () => this.required.command<T>(args),
       () => this.required.command<T>(args)
     )
+    if (process.env.CASSETTE_TRACE === '1') {
+      void run.then(
+        () => console.log(`[mpv] done ${label} after ${Date.now() - queuedAt}ms`),
+        (e) => console.log(`[mpv] FAILED ${label} after ${Date.now() - queuedAt}ms: ${e.message}`)
+      )
+    }
     // Keep the chain alive even when a command rejects.
     this.queue = run.catch(() => undefined)
     return run

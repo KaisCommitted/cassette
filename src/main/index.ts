@@ -134,6 +134,31 @@ async function bootstrap(): Promise<void> {
   const overlayInteraction = createOverlayInteraction(mainWindow, overlayWindow)
   const mpv = new MpvController()
 
+  /**
+   * The controls only float while Cassette is the app you are using.
+   *
+   * They sit above the picture by being always-on-top, and always-on-top is
+   * not relative to this app — it is above every window on the desktop. So
+   * switching to something else during an episode left a slab of controls
+   * hanging over whatever you switched to, with the video window below it.
+   *
+   * Tying it to focus keeps the controls above the video where they belong
+   * and lets the whole app go behind, the way any other window does. The
+   * video window needs no such handling: it is owned by the main window, so
+   * it already follows it in the z-order.
+   */
+  const floatOnlyWhenActive = (): void => {
+    if (overlayWindow.isDestroyed()) return
+    overlayWindow.setAlwaysOnTop(mainWindow.isFocused(), 'pop-up-menu')
+  }
+  mainWindow.on('focus', floatOnlyWhenActive)
+  mainWindow.on('blur', floatOnlyWhenActive)
+  // Also when the controls appear, not only when focus changes: starting an
+  // episode while the window is already in the background fires no focus
+  // event at all, and the controls would come up floating over everything.
+  overlayWindow.on('show', floatOnlyWhenActive)
+  floatOnlyWhenActive()
+
   // Handlers must be registered before the renderer mounts and starts calling
   // them. Starting mpv takes hundreds of milliseconds, so it must not come
   // first — the renderer's initial getLibrary() would arrive with no handler.
