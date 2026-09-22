@@ -1,4 +1,6 @@
 import { app, ipcMain, type BrowserWindow } from 'electron'
+import { readdir, rm, stat } from 'node:fs/promises'
+import { join } from 'node:path'
 // electron-updater is CommonJS. Importing it statically lets the bundler emit a
 // plain require; a dynamic import() wraps it in a module object instead, and
 // autoUpdater came back undefined in the packaged build.
@@ -61,5 +63,63 @@ export function initUpdater(mainWindow: BrowserWindow): void {
     })
 
     await autoUpdater.checkForUpdates().catch(() => undefined)
+
+    // Checking only at launch means an app left open for days never hears
+    // about anything. Re-checking on a timer is what makes "there is a new
+    // version" arrive while you are using it rather than only after a
+    // restart. It reports the newest release each time, so several versions
+    // going out between checks is still one update, not one per version.
+    const timer = setInterval(
+      () => void autoUpdater.checkForUpdates().catch(() => undefined),
+      CHECK_EVERY_MS
+    )
+    timer.unref?.()
   })()
+}
+
+/** Three hours: often enough to notice, rare enough to ignore. */
+const CHECK_EVERY_MS = 3 * 60 * 60 * 1000
+
+/**
+ * Clears installers left in the update cache.
+ *
+ * electron-updater keeps the downloaded installer after running it, so every
+ * update leaves about 150 MB behind and the next one leaves another. Nothing
+ * ever removes them.
+ *
+ * Only files that have been sitting for a day go: a download interrupted an
+ * hour ago is worth keeping, since throwing it away means pulling the whole
+ * installer down again.
+ */
+export async function cleanUpdaterCache(): Promise<number> {
+  // electron-updater puts its cache under Local, not Roaming where the app's
+  // own data lives, and names it from updaterCacheDirName in app-update.yml.
+  const local = process.env.LOCALAPPDATA
+  if (!local) return 0
+  const dir = join(local, 'cassette-updater')
+  const DAY_MS = 24 * 60 * 60 * 1000
+
+  let freed = 0
+  try {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name)
+      try {
+        const info = await stat(path)
+        if (Date.now() - info.mtimeMs < DAY_MS) continue
+        if (entry.isDirectory()) {
+          for (const inner of await readdir(path)) {
+            freed += (await stat(join(path, inner))).size
+          }
+        } else {
+          freed += info.size
+        }
+        await rm(path, { recursive: true, force: true })
+      } catch {
+        // In use, or gone already. Either way, leave it alone.
+      }
+    }
+  } catch {
+    // No cache directory yet, which is the normal case on a fresh install.
+  }
+  return freed
 }

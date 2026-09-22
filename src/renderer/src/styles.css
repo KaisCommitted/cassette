@@ -1363,3 +1363,32 @@ button {
 @media (prefers-reduced-motion: reduce) {
   .scan-fill.indeterminate { animation: none; }
 }
+
+/* ============ pointer continuity ============ */
+
+/*
+ * The gaps between tiles carry the pointer cursor too.
+ *
+ * A grid of clickable tiles separated by 18px of container is, to the mouse,
+ * an alternating strip of clickable and not: dragging the pointer across the
+ * library flipped the cursor between a hand and an arrow on every crossing,
+ * several times a second, which reads as the whole window flickering.
+ *
+ * Setting it on the container rather than closing the gaps keeps the click
+ * targets exactly where they look like they are — widening them into the gaps
+ * would mean clicking just outside a tile opens it, which is worse than the
+ * flicker. The gap is part of the same field of tiles; it may as well say so.
+ */
+.poster-grid,
+.still-grid,
+.grid,
+.season-tabs {
+  cursor: pointer;
+}
+
+/* The same for the rows in a season: they are separated by margin, and the
+   strip between two episodes was reverting to an arrow. */
+.episode {
+  margin-bottom: 0;
+  padding-bottom: 14px;
+}

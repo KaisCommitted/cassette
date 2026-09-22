@@ -42,7 +42,7 @@ import { serveArtwork } from './tmdb/artProtocol'
 import { registerCustomSchemes } from './protocolSchemes'
 import { serveRenderer } from './appProtocol'
 import { scheduleTestCapture } from './testCapture'
-import { initUpdater } from './updater'
+import { cleanUpdaterCache, initUpdater } from './updater'
 
 /**
  * mpv draws into a native child window, but Chromium presents through
@@ -84,6 +84,23 @@ if (!isOnlyInstance) {
   })
 }
 
+/**
+ * A failed background operation must never end the app.
+ *
+ * Node ends the process on an unhandled rejection, and in a desktop app that
+ * means the windows stay on screen and simply stop answering — which reads as
+ * a freeze rather than a crash, with nothing to show for it.
+ *
+ * There is plenty here that can reject through no fault of the user: every mpv
+ * command rejects if the player does not reply within five seconds or answers
+ * with an error, and closing a file mid-load makes the commands still queued
+ * behind it fail by definition. None of that is worth losing what you were
+ * watching over.
+ */
+process.on('unhandledRejection', (reason) => {
+  console.error('[cassette] unhandled rejection:', reason)
+})
+
 // Custom schemes must be declared before the app is ready.
 registerCustomSchemes()
 
@@ -98,6 +115,11 @@ async function bootstrap(): Promise<void> {
   // read from disk, or the rename would look like a fresh install.
   await migrateLegacyData()
   await cleanupStaleTemps()
+  // Installers from updates already applied, which nothing else removes.
+  const freed = await cleanUpdaterCache()
+  if (freed > 0) {
+    console.log(`[update] reclaimed ${Math.round(freed / 1e6)} MB of old installers`)
+  }
 
   const settings = new SettingsStore(settingsFile())
   const progress = new ProgressStore(progressFile())
@@ -229,6 +251,21 @@ async function bootstrap(): Promise<void> {
     onTrigger: () => void hotkey.trigger()
   })
 
+  /**
+   * Runs a bound action and absorbs whatever it throws.
+   *
+   * A keypress arriving at a bad moment — Escape while a file is still
+   * loading, a seek after the file went away — makes the underlying mpv
+   * command reject. That is a shrug, not a reason to take the app down with
+   * it, and every caller here is a key or a mouse button with nowhere to
+   * report a failure to anyway.
+   */
+  function runActionSafely(action: string): void {
+    void runAction(action).catch((error: Error) => {
+      console.error(`[cassette] ${action} failed:`, error.message)
+    })
+  }
+
   async function runAction(action: string): Promise<void> {
     const state = mpv.getState()
     switch (action) {
@@ -326,7 +363,7 @@ async function bootstrap(): Promise<void> {
     // Typing in the search box must not fire playback shortcuts.
     if (playerOnly.has(action) && !mpv.getState().path) return
     event.preventDefault()
-    void runAction(action)
+    runActionSafely(action)
   })
 
   // Mouse bindings arrive as descriptors from the overlay, which covers the
@@ -335,7 +372,7 @@ async function bootstrap(): Promise<void> {
     const action = ctx?.bindings.resolve(descriptor)
     if (!action) return
     if (playerOnly.has(action) && !mpv.getState().path) return
-    void runAction(action)
+    runActionSafely(action)
   })
 
   // Auto-advance: when an episode finishes, roll into the next one. This
@@ -362,7 +399,9 @@ async function bootstrap(): Promise<void> {
       const next = findNext(ctx.library, finishedKey)
       if (next) await playItem(ctx, next)
       else await stopPlayback(ctx)
-    })()
+    })().catch((error: Error) => {
+      console.error(`[cassette] auto-advance failed:`, error.message)
+    })
   })
 
   /**
@@ -374,7 +413,15 @@ async function bootstrap(): Promise<void> {
    */
   let autoSelectedFor: string | null = null
   mpv.on('state', (state: PlaybackState) => {
-    if (!state.path || state.loading || state.tracks.length === 0) return
+    // Closing the player clears this, so the same episode played again gets
+    // its subtitles chosen afresh. Without it, watching something, closing it
+    // and starting it again left the subtitles off: the path had not changed,
+    // so none of this ran a second time.
+    if (!state.path) {
+      autoSelectedFor = null
+      return
+    }
+    if (state.loading || state.tracks.length === 0) return
     if (autoSelectedFor === state.path) return
     autoSelectedFor = state.path
 
@@ -397,7 +444,9 @@ async function bootstrap(): Promise<void> {
         config.autoEnableSubtitles
       )
       if (subtitle !== null) await mpv.setSubtitleTrack(subtitle)
-    })()
+    })().catch((error: Error) => {
+      console.error(`[cassette] track selection failed:`, error.message)
+    })
   })
 
   // Keep the countdown on screen ticking.
@@ -447,7 +496,9 @@ async function bootstrap(): Promise<void> {
       const { flattenPlayable } = await import('./library/playQueue')
       const first = flattenPlayable(library)[0]
       if (first) await playItem(ctx, first)
-    })()
+    })().catch((error: Error) => {
+      console.error(`[cassette] autoplay test hook failed:`, error.message)
+    })
   }
 }
 
