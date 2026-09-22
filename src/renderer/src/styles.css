@@ -931,42 +931,23 @@ button {
 }
 
 /*
- * Grain, fixed to the viewport so it reads as the projection rather than the
- * content. Kept faint: it should be felt, not seen.
+ * The grain and the edge falloff are gone.
  *
- * Static. It used to drift three times a second, which meant repainting a
- * full-viewport layer on top of everything else continuously — expensive here
- * in particular, because this app runs with DirectComposition disabled (that
- * is what makes mpv's video visible at all) and so pays more for full-window
+ * Both were full-viewport layers sitting above every pixel of content, so any
+ * repaint — a hover, a scroll, a card lighting up — had to blend them across
+ * the whole window. That is ordinarily cheap. It is not cheap here: this app
+ * runs with DirectComposition disabled, which is what makes mpv's video
+ * visible at all and is not optional, so it pays far more for full-window
  * effects than a normal Electron app would.
  *
- * No `will-change` on it: nothing about it changes any more, and the hint only
- * buys a permanently promoted compositing layer that then has to be blended
- * over the whole window on every frame.
+ * The suspicion is that this is what delays the cursor while the pointer is
+ * moving: a renderer busy compositing the whole viewport answers "which
+ * cursor" late, and Windows falls back to the arrow until it hears otherwise.
+ * That is a hypothesis, not a demonstrated cause — but the effect cost real
+ * work on every frame at an opacity of 0.035, which is barely visible, so it
+ * is not worth keeping either way.
  */
-.shell::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 3;
-  opacity: 0.035;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
-}
 
-/* Falloff at the edges, the way a projected image dims off-centre. */
-.shell::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 2;
-  background: radial-gradient(
-    130% 110% at 50% 35%,
-    transparent 52%,
-    rgba(0, 0, 0, 0.38) 100%
-  );
-}
 
 .rail,
 .main {

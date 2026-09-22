@@ -59,6 +59,24 @@ export async function stopPlayback(ctx: AppContext): Promise<void> {
   ctx.overlayInteraction.stop()
   ctx.overlayWindow.hide()
   ctx.videoWindow.hide()
+
+  // Fullscreen belongs to the player, not the library. Closing an episode
+  // while fullscreen used to leave the window that way, which was wrong on its
+  // own and also left the screen black: the two windows covering the library
+  // had just been hidden, and on this compositing path nothing repaints what
+  // they were covering. The next thing to disturb the window — switching away
+  // and back — brought the picture back, which is what made it look like an
+  // alt-tab problem.
+  if (ctx.mainWindow.isFullScreen()) {
+    ctx.mainWindow.setFullScreen(false)
+    ctx.mpv.setFullscreen(false)
+  }
+
+  // Ask for a repaint regardless. Leaving fullscreen resizes the window, which
+  // forces one by itself, but closing a windowed player does not — and the
+  // same stale area can be left behind there.
+  if (!ctx.mainWindow.isDestroyed()) ctx.mainWindow.webContents.invalidate()
+
   await ctx.progress.save()
 }
 

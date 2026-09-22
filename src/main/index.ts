@@ -1,7 +1,6 @@
 import { app, ipcMain, Menu } from 'electron'
 import { join } from 'node:path'
-import { readFileSync } from 'node:fs'
-import { IPC, type Library, type PlaybackState, type Settings } from '@shared/types'
+import { IPC, type Library, type PlaybackState } from '@shared/types'
 import { describeKey } from './input/descriptors'
 import { BindingsStore } from './input/bindingsStore'
 import { GlobalHotkeyMachine } from './input/globalHotkey'
@@ -56,27 +55,26 @@ import { cleanUpdaterCache, initUpdater } from './updater'
  * also stopped the app's own windows painting. It pairs with `--d3d11-flip=no`
  * on the mpv side; neither works alone.
  */
-const legacyCompositing = readLegacyCompositingSetting()
-if (legacyCompositing) app.commandLine.appendSwitch('disable-direct-composition')
+app.commandLine.appendSwitch('disable-direct-composition')
 
 /**
- * Reads one setting before anything else has started.
+ * This was tested, and it is not optional.
  *
- * Switches like this one are read by Chromium as it starts, which is long
- * before the settings store is loaded — so this goes straight to the file,
- * synchronously, and falls back to the safe answer if anything is missing or
- * unreadable. The safe answer is the slow path: a black picture is worse than
- * a slow one.
+ * It was briefly a setting, on the theory that the workaround might have been
+ * left over from when mpv drew into the main window rather than one of its
+ * own. Turning it off produces a black player — no picture, fullscreen or
+ * windowed, with nothing else changed. So the flag is load-bearing, and the
+ * cost it imposes on the rest of the app is the price of video working.
+ *
+ * That cost is real and permanent: every repaint in the whole app, not just
+ * the player, goes through the slower path. Anything that has to be composited
+ * across the full window is therefore worth more here than it looks.
+ *
+ * Removing it for good needs a different architecture — video rendered into
+ * the page as a texture rather than into a window of its own — which in
+ * Electron means giving up mpv.
  */
-function readLegacyCompositingSetting(): boolean {
-  try {
-    const file = join(app.getPath('userData'), 'settings.json')
-    const saved = JSON.parse(readFileSync(file, 'utf8')) as Partial<Settings>
-    return saved.legacyVideoCompositing !== false
-  } catch {
-    return true
-  }
-}
+const legacyCompositing = true
 
 /**
  * One Cassette at a time.
