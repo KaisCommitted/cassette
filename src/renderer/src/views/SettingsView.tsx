@@ -189,6 +189,26 @@ export function SettingsView({
             </p>
           </div>
 
+          <div className="field">
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={!settings.legacyVideoCompositing}
+                onChange={(e) =>
+                  onChangeSettings({ legacyVideoCompositing: !e.target.checked })
+                }
+              />
+              Use faster window drawing (restart to apply)
+            </label>
+            <p className="field-help">
+              To show video above its own interface, Cassette puts Windows on an
+              older drawing path — for the whole app, not just the player, and the
+              whole time. That may be why the cursor flickers as it moves across
+              the library. Turning this on skips it. If video goes black after a
+              restart, turn it back off: the picture matters more than the polish.
+            </p>
+          </div>
+
           <SubtitleSettings settings={settings} onChange={onChangeSettings} />
 
           <h2 className="section-title">Subtitle downloads</h2>

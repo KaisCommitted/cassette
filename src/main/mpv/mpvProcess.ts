@@ -28,8 +28,11 @@ export function hwndToNumber(handle: Buffer): string {
  * This works together with `disable-direct-composition` in the main process;
  * both are needed, and neither is sufficient alone.
  */
-function videoOutputArgs(): string[] {
-  return ['--d3d11-flip=no']
+function videoOutputArgs(legacy: boolean): string[] {
+  // Paired with `disable-direct-composition` on the Chromium side. Both go
+  // together or neither does: bitblt presentation only helps while Chromium
+  // is on the matching path, and on the modern path it is pure cost.
+  return legacy ? ['--d3d11-flip=no'] : []
 }
 
 /** Test runs play silently so they do not interrupt whatever else is going on. */
@@ -49,7 +52,7 @@ export interface MpvProcess {
  * mpv is given no input handling at all — every binding in this app is ours,
  * and mpv stealing keyboard focus would break that.
  */
-export async function startMpv(hwnd: Buffer): Promise<MpvProcess> {
+export async function startMpv(hwnd: Buffer, legacyCompositing = true): Promise<MpvProcess> {
   // The suffix is random, not just the pid: an orphaned mpv from a crashed or
   // force-killed run can still be holding a pipe, and a recycled pid would let
   // us connect to that stale player instead of the one we just spawned —
@@ -64,7 +67,7 @@ export async function startMpv(hwnd: Buffer): Promise<MpvProcess> {
       '--force-window=yes',
       '--keep-open=no',
       '--hwdec=auto-safe',
-      ...videoOutputArgs(),
+      ...videoOutputArgs(legacyCompositing),
       '--no-input-default-bindings',
       '--input-vo-keyboard=no',
       '--input-cursor=no',

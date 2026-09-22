@@ -1,6 +1,7 @@
 import { app, ipcMain, Menu } from 'electron'
 import { join } from 'node:path'
-import { IPC, type Library, type PlaybackState } from '@shared/types'
+import { readFileSync } from 'node:fs'
+import { IPC, type Library, type PlaybackState, type Settings } from '@shared/types'
 import { describeKey } from './input/descriptors'
 import { BindingsStore } from './input/bindingsStore'
 import { GlobalHotkeyMachine } from './input/globalHotkey'
@@ -55,7 +56,27 @@ import { cleanUpdaterCache, initUpdater } from './updater'
  * also stopped the app's own windows painting. It pairs with `--d3d11-flip=no`
  * on the mpv side; neither works alone.
  */
-app.commandLine.appendSwitch('disable-direct-composition')
+const legacyCompositing = readLegacyCompositingSetting()
+if (legacyCompositing) app.commandLine.appendSwitch('disable-direct-composition')
+
+/**
+ * Reads one setting before anything else has started.
+ *
+ * Switches like this one are read by Chromium as it starts, which is long
+ * before the settings store is loaded — so this goes straight to the file,
+ * synchronously, and falls back to the safe answer if anything is missing or
+ * unreadable. The safe answer is the slow path: a black picture is worse than
+ * a slow one.
+ */
+function readLegacyCompositingSetting(): boolean {
+  try {
+    const file = join(app.getPath('userData'), 'settings.json')
+    const saved = JSON.parse(readFileSync(file, 'utf8')) as Partial<Settings>
+    return saved.legacyVideoCompositing !== false
+  } catch {
+    return true
+  }
+}
 
 /**
  * One Cassette at a time.
@@ -226,7 +247,7 @@ async function bootstrap(): Promise<void> {
   scheduleTestCapture(mainWindow)
 
 
-  await mpv.start(videoWindow.getNativeWindowHandle())
+  await mpv.start(videoWindow.getNativeWindowHandle(), legacyCompositing)
 
   const hotkey = new GlobalHotkeyMachine({
     isArmed: () => Boolean(mpv.getState().path) && !mpv.getState().paused,

@@ -118,6 +118,21 @@ export interface Settings {
    * noise in a list of things to watch. Set to 0 to keep everything.
    */
   minimumDurationMinutes: number
+  /**
+   * Draw video the slow, compatible way.
+   *
+   * mpv paints into a window of its own, and for that picture to appear above
+   * the app's own drawing, Chromium is put back on an older compositing path
+   * for the entire app — not just the player. That is a real cost paid all the
+   * time, including while browsing the library, and it may no longer be needed
+   * now that the video has a window to itself rather than sharing the main
+   * one.
+   *
+   * On by default because the alternative is a black picture if the guess is
+   * wrong, and a black picture is worse than a slow one. Takes effect on
+   * restart, since it changes how the app starts up.
+   */
+  legacyVideoCompositing: boolean
 }
 
 export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = {
@@ -187,7 +202,8 @@ export const DEFAULT_SETTINGS: Settings = {
   autoEnableSubtitles: true,
   subtitleStyle: DEFAULT_SUBTITLE_STYLE,
   nightAudio: false,
-  minimumDurationMinutes: 15
+  minimumDurationMinutes: 15,
+  legacyVideoCompositing: true
 }
 
 export const MEDIA_EXTENSIONS = [

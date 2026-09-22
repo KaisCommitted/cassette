@@ -60,8 +60,8 @@ export class MpvController extends EventEmitter {
   private ipc: MpvIpc | null = null
   private state: PlaybackState = emptyState()
 
-  async start(hwnd: Buffer): Promise<void> {
-    this.proc = await startMpv(hwnd)
+  async start(hwnd: Buffer, legacyCompositing = true): Promise<void> {
+    this.proc = await startMpv(hwnd, legacyCompositing)
     this.ipc = new MpvIpc(this.proc.socket)
     this.ipc.on('property', (name: string, value: unknown) => {
       this.onProperty(name, value)
