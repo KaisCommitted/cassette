@@ -421,7 +421,13 @@ async function bootstrap(): Promise<void> {
     const now = Date.now()
     if (now - lastSaved >= 5000) {
       lastSaved = now
-      void progress.save()
+      // Nothing awaits this, so it has to swallow its own failures: an
+      // unhandled rejection here takes the whole main process down, and the
+      // app freezing is a far worse outcome than one missed save of a
+      // position that will be written again five seconds later.
+      void progress.save().catch((error: Error) => {
+        console.error('[progress] save failed:', error.message)
+      })
     }
   })
 
@@ -460,6 +466,6 @@ app.on('before-quit', () => {
   const orphans = killRunningProbes()
   if (orphans > 0) console.log(`[scan] stopped ${orphans} probe(s) on quit`)
   if (!ctx) return
-  void ctx.progress.save()
+  void ctx.progress.save().catch(() => undefined)
   ctx.mpv.dispose()
 })
