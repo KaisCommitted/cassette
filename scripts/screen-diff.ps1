@@ -45,7 +45,7 @@ for ($y = 0; $y -lt $h; $y += $step) {
     }
 }
 
-$shotPath = Join-Path $OutDir 'mnf-screen.png'
+$shotPath = Join-Path $OutDir 'cassette-screen.png'
 $b.Save($shotPath, [System.Drawing.Imaging.ImageFormat]::Png)
 
 $a.Dispose()

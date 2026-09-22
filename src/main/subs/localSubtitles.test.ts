@@ -7,7 +7,7 @@ import { findLocalSubtitles, guessLanguage, languageName } from './localSubtitle
 let root: string
 
 beforeAll(async () => {
-  root = await mkdtemp(join(tmpdir(), 'mnf-subs-'))
+  root = await mkdtemp(join(tmpdir(), 'cassette-subs-'))
   await mkdir(join(root, 'Subs'), { recursive: true })
   await writeFile(join(root, 'Show S01E01.mkv'), 'video')
   await writeFile(join(root, 'Show S01E01.eng.srt'), 'subs')

@@ -7,7 +7,7 @@ import { walk } from './walker'
 let root: string
 
 beforeAll(async () => {
-  root = await mkdtemp(join(tmpdir(), 'mnf-'))
+  root = await mkdtemp(join(tmpdir(), 'cassette-'))
   await mkdir(join(root, 'Series', 'Show', 'Season 1 720p WEBRip'), { recursive: true })
   await mkdir(join(root, 'Movies'), { recursive: true })
   await writeFile(

@@ -25,7 +25,7 @@ export function Still({ thumbKey, alt, fraction, watched }: StillProps) {
     <div className="card-still">
       {thumbKey && !failed ? (
         <img
-          src={`mnf-thumb://${thumbKey}`}
+          src={`cassette-thumb://${thumbKey}`}
           alt={alt}
           loading="lazy"
           onError={() => setFailed(true)}

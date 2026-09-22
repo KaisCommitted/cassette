@@ -16,7 +16,7 @@ const gridStyle = {
 
 export function LibraryView({ library, progress, onRescan }: LibraryViewProps) {
   const play = (path: string, key: string): void => {
-    void window.mininetflix.play(path, key)
+    void window.cassette.play(path, key)
   }
 
   return (

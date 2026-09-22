@@ -11,7 +11,7 @@ export function SetupView({ onChoose }: { onChoose: () => void }) {
       }}
     >
       <div>
-        <h1 style={{ marginBottom: 8 }}>Mininetflix</h1>
+        <h1 style={{ marginBottom: 8 }}>Cassette</h1>
         <p style={{ opacity: 0.7, marginBottom: 24 }}>
           Choose the folder where your movies and series live.
         </p>

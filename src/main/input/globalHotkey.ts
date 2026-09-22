@@ -1,5 +1,5 @@
 /**
- * The one binding that works while Mininetflix is not focused.
+ * The one binding that works while Cassette is not focused.
  *
  * Everything else in the app is scoped to the focused window. This is the
  * exception, and it is deliberately narrow:

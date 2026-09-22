@@ -4,7 +4,7 @@
 
 param(
     [double]$SeekRatio = 0.6,
-    [string]$Title = 'Mininetflix'
+    [string]$Title = 'Cassette'
 )
 
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
@@ -60,7 +60,7 @@ $bmp = New-Object System.Drawing.Bitmap $w, $stripH
 $g = [System.Drawing.Graphics]::FromImage($bmp)
 $g.CopyFromScreen($r.Left, ($r.Top + $h - $stripH), 0, 0, (New-Object System.Drawing.Size $w, $stripH))
 $g.Dispose()
-$out = Join-Path $env:TEMP 'mnf-click.png'
+$out = Join-Path $env:TEMP 'cassette-click.png'
 $bmp.Save($out, [System.Drawing.Imaging.ImageFormat]::Png)
 $bmp.Dispose()
 

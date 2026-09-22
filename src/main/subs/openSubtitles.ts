@@ -34,7 +34,7 @@ export class OpenSubtitlesClient {
       'Api-Key': this.config.apiKey,
       'Content-Type': 'application/json',
       // OpenSubtitles rejects requests without an identifying agent.
-      'User-Agent': this.config.userAgent ?? 'Mininetflix v0.1'
+      'User-Agent': this.config.userAgent ?? 'Cassette v0.1'
     }
   }
 

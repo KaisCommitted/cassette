@@ -9,7 +9,7 @@ const HEIGHT = 900
  * automated playback checks do not take over the screen being worked on.
  */
 function testPosition(): { x: number; y: number } | null {
-  if (process.env.MNF_TEST !== '1') return null
+  if (process.env.CASSETTE_TEST !== '1') return null
   const primary = screen.getPrimaryDisplay()
   const other = screen.getAllDisplays().find((d) => d.id !== primary.id)
   if (!other) return null

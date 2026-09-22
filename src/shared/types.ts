@@ -170,7 +170,7 @@ export const MEDIA_EXTENSIONS = [
 /** Fraction of duration past which an item counts as watched. */
 export const FINISHED_THRESHOLD = 0.9
 
-export interface MininetflixApi {
+export interface CassetteApi {
   chooseFolder: () => Promise<string | null>
   getSettings: () => Promise<Settings>
   setRoots: (roots: string[]) => Promise<Library>
@@ -218,7 +218,7 @@ export interface MininetflixApi {
 
 declare global {
   interface Window {
-    mininetflix: MininetflixApi
+    cassette: CassetteApi
   }
 }
 

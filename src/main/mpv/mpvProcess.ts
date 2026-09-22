@@ -34,7 +34,7 @@ function videoOutputArgs(): string[] {
 
 /** Test runs play silently so they do not interrupt whatever else is going on. */
 function testArgs(): string[] {
-  return process.env.MNF_TEST === '1' ? ['--mute=yes', '--volume=0'] : []
+  return process.env.CASSETTE_TEST === '1' ? ['--mute=yes', '--volume=0'] : []
 }
 
 export interface MpvProcess {
@@ -54,7 +54,7 @@ export async function startMpv(hwnd: Buffer): Promise<MpvProcess> {
   // force-killed run can still be holding a pipe, and a recycled pid would let
   // us connect to that stale player instead of the one we just spawned —
   // silently controlling the wrong file.
-  const pipePath = `\\\\.\\pipe\\mininetflix-mpv-${process.pid}-${randomUUID()}`
+  const pipePath = `\\\\.\\pipe\\cassette-mpv-${process.pid}-${randomUUID()}`
   const child = spawn(
     mpvBinaryPath(),
     [
@@ -72,8 +72,8 @@ export async function startMpv(hwnd: Buffer): Promise<MpvProcess> {
       '--no-osd-bar',
       '--sub-auto=fuzzy',
       ...testArgs(),
-      ...(process.env.MNF_MPV_LOG === '1'
-        ? ['--msg-level=all=v', `--log-file=${process.env.TEMP}\\mnf-mpv.log`]
+      ...(process.env.CASSETTE_MPV_LOG === '1'
+        ? ['--msg-level=all=v', `--log-file=${process.env.TEMP}\\cassette-mpv.log`]
         : [])
     ],
     { stdio: 'ignore' }

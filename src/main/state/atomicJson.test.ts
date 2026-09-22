@@ -6,7 +6,7 @@ import { readJson, writeJsonAtomic } from './atomicJson'
 
 let dir: string
 beforeAll(async () => {
-  dir = await mkdtemp(join(tmpdir(), 'mnf-json-'))
+  dir = await mkdtemp(join(tmpdir(), 'cassette-json-'))
 })
 afterAll(async () => {
   await rm(dir, { recursive: true, force: true })

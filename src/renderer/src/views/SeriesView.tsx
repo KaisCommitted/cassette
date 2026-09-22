@@ -36,18 +36,18 @@ export function SeriesView({
   // The season tabs should follow the library when progress changes underneath.
   useEffect(() => setScanResults(null), [series.id])
 
-  const scan = async (scope: Parameters<typeof window.mininetflix.scanSubtitles>[0]) => {
+  const scan = async (scope: Parameters<typeof window.cassette.scanSubtitles>[0]) => {
     setScanning(true)
     setScanResults(null)
     try {
-      setScanResults(await window.mininetflix.scanSubtitles(scope))
+      setScanResults(await window.cassette.scanSubtitles(scope))
     } finally {
       setScanning(false)
     }
   }
 
   const toggleWatched = async (key: string, watched: boolean): Promise<void> => {
-    await window.mininetflix.markWatched(key, watched)
+    await window.cassette.markWatched(key, watched)
     onRefreshProgress()
   }
 
@@ -69,7 +69,7 @@ export function SeriesView({
       <div className="series-actions">
         <button
           className="btn primary"
-          onClick={() => void window.mininetflix.resumeSeries(series.id)}
+          onClick={() => void window.cassette.resumeSeries(series.id)}
         >
           {summary.watchedCount === 0 ? 'Start watching' : 'Resume'}
         </button>

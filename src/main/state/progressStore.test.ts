@@ -7,7 +7,7 @@ import { ProgressStore } from './progressStore'
 
 let dir: string
 beforeAll(async () => {
-  dir = await mkdtemp(join(tmpdir(), 'mnf-prog-'))
+  dir = await mkdtemp(join(tmpdir(), 'cassette-prog-'))
 })
 afterAll(async () => {
   await rm(dir, { recursive: true, force: true })

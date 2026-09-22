@@ -13,7 +13,7 @@ export interface ControlBarProps {
 
 type MenuId = 'subs' | 'audio' | 'speed' | 'sleep' | null
 
-const api = window.mininetflix
+const api = window.cassette
 
 export function ControlBar({
   state,

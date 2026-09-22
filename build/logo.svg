@@ -1,0 +1,39 @@
+<!--
+  Cassette — app mark.
+
+  A tape shell seen head-on: the two spools are the only moving parts, so they
+  carry the accent and everything else stays quiet. The right spool is wound
+  fuller than the left, which is how a half-played tape actually looks — the
+  same idea as the app showing you how far through something you are.
+-->
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Cassette">
+  <rect width="512" height="512" rx="112" fill="#12151A"/>
+
+  <!-- Shell -->
+  <rect x="72" y="136" width="368" height="240" rx="26" fill="#1B2027" stroke="#2C343E" stroke-width="6"/>
+
+  <!-- Label area: the paler band a tape's written label sits on -->
+  <rect x="104" y="166" width="304" height="104" rx="12" fill="#232B34"/>
+  <rect x="124" y="192" width="180" height="9" rx="4.5" fill="#39434F"/>
+  <rect x="124" y="218" width="116" height="9" rx="4.5" fill="#39434F"/>
+
+  <!-- Window and spools -->
+  <rect x="146" y="286" width="220" height="62" rx="14" fill="#0C0F13" stroke="#2C343E" stroke-width="5"/>
+
+  <!-- Left spool: nearly unwound -->
+  <circle cx="198" cy="317" r="21" fill="#0C0F13" stroke="#E8A33D" stroke-width="7"/>
+  <circle cx="198" cy="317" r="7" fill="#E8A33D"/>
+
+  <!-- Right spool: wound full, the played-through side -->
+  <circle cx="314" cy="317" r="21" fill="#E8A33D" opacity="0.18"/>
+  <circle cx="314" cy="317" r="21" fill="none" stroke="#E8A33D" stroke-width="7"/>
+  <circle cx="314" cy="317" r="7" fill="#E8A33D"/>
+
+  <!-- Tape spanning the two spools -->
+  <rect x="219" y="311" width="74" height="12" fill="#0C0F13"/>
+  <rect x="219" y="313" width="74" height="4" rx="2" fill="#6A4C1E"/>
+
+  <!-- Drive holes -->
+  <circle cx="122" cy="317" r="10" fill="#0C0F13" stroke="#2C343E" stroke-width="4"/>
+  <circle cx="390" cy="317" r="10" fill="#0C0F13" stroke="#2C343E" stroke-width="4"/>
+</svg>

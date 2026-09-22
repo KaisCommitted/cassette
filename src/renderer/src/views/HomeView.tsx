@@ -57,7 +57,7 @@ export function HomeView({
                 className="card"
                 onClick={() =>
                   item.seriesId
-                    ? void window.mininetflix.resumeSeries(item.seriesId)
+                    ? void window.cassette.resumeSeries(item.seriesId)
                     : onPlay(item.path, item.key)
                 }
               >

@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import {
   IPC,
   type Library,
-  type MininetflixApi,
+  type CassetteApi,
   type PlaybackState,
   type ProgressRecord,
   type Settings
@@ -11,7 +11,7 @@ import {
 const invoke = <T,>(channel: string, ...args: unknown[]): Promise<T> =>
   ipcRenderer.invoke(channel, ...args) as Promise<T>
 
-const api: MininetflixApi = {
+const api: CassetteApi = {
   chooseFolder: () => invoke<string | null>(IPC.chooseFolder),
   getSettings: () => invoke<Settings>(IPC.getSettings),
   setRoots: (roots) => invoke<Library>(IPC.setRoots, roots),
@@ -73,4 +73,4 @@ const api: MininetflixApi = {
   }
 }
 
-contextBridge.exposeInMainWorld('mininetflix', api)
+contextBridge.exposeInMainWorld('cassette', api)

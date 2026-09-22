@@ -3,10 +3,10 @@ import { pathToFileURL } from 'node:url'
 import type { Library } from '@shared/types'
 import type { ThumbnailService } from './thumbnails'
 
-export const THUMB_SCHEME = 'mnf-thumb'
+export const THUMB_SCHEME = 'cassette-thumb'
 
 /**
- * Serves generated stills to the renderer over `mnf-thumb://<key>`.
+ * Serves generated stills to the renderer over `cassette-thumb://<key>`.
  *
  * A custom scheme rather than `file://`: the renderer runs with context
  * isolation and no filesystem access, and this exposes exactly one directory

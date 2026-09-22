@@ -12,7 +12,7 @@ export function Overlay() {
   const [menuOpen, setMenuOpen] = useState(false)
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  useEffect(() => window.mininetflix.onPlaybackState(setState), [])
+  useEffect(() => window.cassette.onPlaybackState(setState), [])
 
   const playing = Boolean(state?.path)
 
@@ -27,7 +27,7 @@ export function Overlay() {
   // moves never reach it and the controls would stay hidden forever.
   useEffect(() => {
     if (!playing) return
-    const off = window.mininetflix.onOverlayActivity(wake)
+    const off = window.cassette.onOverlayActivity(wake)
     wake()
     return () => {
       off()
@@ -42,7 +42,7 @@ export function Overlay() {
 
   // Mouse input over the video resolves through the same binding table as the
   // keyboard, so anything bindable to a key is bindable to a button.
-  const send = (descriptor: string): void => window.mininetflix.runInput(descriptor)
+  const send = (descriptor: string): void => window.cassette.runInput(descriptor)
 
   return (
     <div
@@ -100,12 +100,12 @@ function LoadingBadge({ label }: { label: string }) {
             borderRadius: '50%',
             border: '3px solid rgba(255,255,255,0.18)',
             borderTopColor: '#e50914',
-            animation: 'mnf-spin 0.8s linear infinite'
+            animation: 'cassette-spin 0.8s linear infinite'
           }}
         />
         <div style={{ fontSize: 14, letterSpacing: 0.2, opacity: 0.85 }}>{label}</div>
       </div>
-      <style>{`@keyframes mnf-spin { to { transform: rotate(360deg) } }`}</style>
+      <style>{`@keyframes cassette-spin { to { transform: rotate(360deg) } }`}</style>
     </div>
   )
 }

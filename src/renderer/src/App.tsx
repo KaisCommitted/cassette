@@ -16,26 +16,26 @@ export function App() {
 
   useEffect(() => {
     void (async () => {
-      setSettings(await window.mininetflix.getSettings())
-      setBindings(await window.mininetflix.getBindings())
+      setSettings(await window.cassette.getSettings())
+      setBindings(await window.cassette.getBindings())
     })()
   }, [])
 
   // Watch positions change while the player is open, so refresh on return.
   useEffect(() => {
-    const off = window.mininetflix.onPlaybackState((state) => {
+    const off = window.cassette.onPlaybackState((state) => {
       if (!state.path) void refreshProgress()
     })
     return off
   }, [refreshProgress])
 
   const play = useCallback((path: string, key: string) => {
-    void window.mininetflix.play(path, key)
+    void window.cassette.play(path, key)
   }, [])
 
   const handleChooseFolder = useCallback(async () => {
     await chooseFolder()
-    setSettings(await window.mininetflix.getSettings())
+    setSettings(await window.cassette.getSettings())
   }, [chooseFolder])
 
   if (loading && !library) {
@@ -46,7 +46,7 @@ export function App() {
     return (
       <div className="center">
         <div>
-          <h1>Mininetflix</h1>
+          <h1>Cassette</h1>
           <p>
             Point it at the folder where your films and series live. Everything stays on
             this machine — nothing is uploaded, and no account is needed.
@@ -65,7 +65,7 @@ export function App() {
     <div className="shell">
       <nav className="rail">
         <div className="wordmark">
-          Mini<span>netflix</span>
+          Cas<span>sette</span>
         </div>
 
         <button
@@ -127,15 +127,15 @@ export function App() {
             onChooseFolder={() => void handleChooseFolder()}
             onRescan={() => void rescan()}
             onAssign={(descriptor, actionId) => {
-              void window.mininetflix
+              void window.cassette
                 .assignBinding(descriptor, actionId)
                 .then(setBindings)
             }}
             onChangeSettings={(changes) => {
-              void window.mininetflix.updateSettings(changes).then(setSettings)
+              void window.cassette.updateSettings(changes).then(setSettings)
             }}
             onResetBindings={() => {
-              void window.mininetflix.resetBindings().then(setBindings)
+              void window.cassette.resetBindings().then(setBindings)
             }}
           />
         )}

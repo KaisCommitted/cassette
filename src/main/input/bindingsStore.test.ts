@@ -6,7 +6,7 @@ import { BindingsStore } from './bindingsStore'
 
 let dir: string
 beforeAll(async () => {
-  dir = await mkdtemp(join(tmpdir(), 'mnf-bind-'))
+  dir = await mkdtemp(join(tmpdir(), 'cassette-bind-'))
 })
 afterAll(async () => {
   await rm(dir, { recursive: true, force: true })

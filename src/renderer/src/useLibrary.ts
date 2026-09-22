@@ -16,29 +16,29 @@ export function useLibrary(): LibraryHook {
   const [loading, setLoading] = useState(true)
 
   const refreshProgress = useCallback(async () => {
-    const records = await window.mininetflix.getProgress()
+    const records = await window.cassette.getProgress()
     setProgress(new Map(records.map((r) => [r.key, r])))
   }, [])
 
   useEffect(() => {
     void (async () => {
-      setLibrary(await window.mininetflix.getLibrary())
+      setLibrary(await window.cassette.getLibrary())
       await refreshProgress()
       setLoading(false)
     })()
   }, [refreshProgress])
 
   const chooseFolder = useCallback(async () => {
-    const folder = await window.mininetflix.chooseFolder()
+    const folder = await window.cassette.chooseFolder()
     if (!folder) return
     setLoading(true)
-    setLibrary(await window.mininetflix.setRoots([folder]))
+    setLibrary(await window.cassette.setRoots([folder]))
     setLoading(false)
   }, [])
 
   const rescan = useCallback(async () => {
     setLoading(true)
-    setLibrary(await window.mininetflix.rescan())
+    setLibrary(await window.cassette.rescan())
     setLoading(false)
   }, [])
 

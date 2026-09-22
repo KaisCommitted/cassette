@@ -1,13 +1,13 @@
-# Brings the Mininetflix window to the front and captures only its rectangle,
+# Brings the Cassette window to the front and captures only its rectangle,
 # twice, reporting how much changed between the two frames.
 #
 # Scoped to the app window on purpose: a full-screen grab would capture
 # whatever else the user has open.
 
 param(
-    [string]$Title = 'Mininetflix',
+    [string]$Title = 'Cassette',
     [int]$DelayMs = 1200,
-    [string]$OutPath = (Join-Path $env:TEMP 'mnf-window.png')
+    [string]$OutPath = (Join-Path $env:TEMP 'cassette-window.png')
 )
 
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing

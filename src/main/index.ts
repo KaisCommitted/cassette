@@ -13,7 +13,14 @@ import { MpvController } from './mpv/mpvController'
 import { ProgressStore } from './state/progressStore'
 import { SettingsStore } from './state/settingsStore'
 import { readJson } from './state/atomicJson'
-import { keybindsFile, libraryFile, progressFile, settingsFile } from './state/paths'
+import {
+  keybindsFile,
+  libraryFile,
+  cleanupStaleTemps,
+  migrateLegacyData,
+  progressFile,
+  settingsFile
+} from './state/paths'
 import { createMainWindow } from './windows/mainWindow'
 import { createOverlayWindow } from './windows/overlayWindow'
 import { createVideoWindow } from './windows/videoWindow'
@@ -44,6 +51,11 @@ let ctx: AppContext | null = null
 let stopHook: (() => void) | null = null
 
 async function bootstrap(): Promise<void> {
+  // Carry over anything saved under the app's previous name before the stores
+  // read from disk, or the rename would look like a fresh install.
+  await migrateLegacyData()
+  await cleanupStaleTemps()
+
   const settings = new SettingsStore(settingsFile())
   const progress = new ProgressStore(progressFile())
   const bindings = new BindingsStore(keybindsFile())
@@ -319,9 +331,9 @@ async function bootstrap(): Promise<void> {
   mainWindow.on('leave-full-screen', () => mpv.setFullscreen(false))
   mainWindow.on('enter-full-screen', () => mpv.setFullscreen(true))
 
-  // MNF_AUTOPLAY starts the first episode unattended, so rendering can be
+  // CASSETTE_AUTOPLAY starts the first episode unattended, so rendering can be
   // verified by screen capture without a person driving the UI.
-  if (process.env.MNF_AUTOPLAY === '1') {
+  if (process.env.CASSETTE_AUTOPLAY === '1') {
     void (async () => {
       const { scanLibrary } = await import('./library/scanner')
       const roots = settings.get().libraryRoots

@@ -1,9 +1,9 @@
 {
-  "name": "mininetflix",
+  "name": "cassette",
   "version": "0.1.0",
-  "description": "A local media library with a streaming-service browse experience and VLC-grade playback.",
+  "description": "A local media library and player for Windows. Your own files, with the browsing of a streaming app and the playback of VLC.",
   "main": "out/main/index.js",
-  "license": "ISC",
+  "license": "MIT",
   "type": "commonjs",
   "scripts": {
     "dev": "electron-vite dev",
@@ -14,8 +14,8 @@
     "package": "npm run build && electron-builder --win"
   },
   "build": {
-    "appId": "com.kaislamine.mininetflix",
-    "productName": "Mininetflix",
+    "appId": "com.kaislamine.cassette",
+    "productName": "Cassette",
     "files": [
       "out/**/*"
     ],
@@ -26,7 +26,8 @@
       }
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "build/icon.png"
     }
   },
   "devDependencies": {
@@ -45,5 +46,10 @@
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "uiohook-napi": "^1.5.5"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/KaisCommitted/cassette.git"
+  },
+  "author": "Kais Lamine"
 }
