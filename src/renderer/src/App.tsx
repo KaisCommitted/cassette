@@ -12,7 +12,8 @@ import { SettingsView } from './views/SettingsView'
 type View = { name: 'home' } | { name: 'series'; id: string } | { name: 'settings' }
 
 export function App() {
-  const { library, progress, loading, chooseFolder, rescan, refreshProgress } = useLibrary()
+  const { library, progress, loading, scanProgress, chooseFolder, rescan, cancelScan, refreshProgress } =
+    useLibrary()
   const [view, setView] = useState<View>({ name: 'home' })
   const [query, setQuery] = useState('')
   const [settings, setSettings] = useState<Settings | null>(null)
@@ -177,8 +178,10 @@ export function App() {
             settings={settings}
             bindings={bindings}
             scanning={loading}
+            scanProgress={scanProgress}
             onChooseFolder={() => void handleChooseFolder()}
             onRescan={() => void rescan()}
+            onCancelScan={() => void cancelScan()}
             onAssign={(descriptor, actionId) => {
               void window.cassette.assignBinding(descriptor, actionId).then(setBindings)
             }}

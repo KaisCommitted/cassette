@@ -3,6 +3,7 @@ import {
   ACTIONS,
   type BundledKeyAvailability,
   type KeyBindings,
+  type ScanProgressInfo,
   type Settings
 } from '@shared/types'
 import { SubtitleSettings } from '../components/SubtitleSettings'
@@ -13,10 +14,12 @@ export interface SettingsViewProps {
   bindings: KeyBindings
   onChooseFolder: () => void
   onRescan: () => void
+  onCancelScan: () => void
   onAssign: (descriptor: string, actionId: string) => void
   onResetBindings: () => void
   onChangeSettings: (changes: Partial<Settings>) => void
   scanning: boolean
+  scanProgress: ScanProgressInfo | null
 }
 
 export function SettingsView({
@@ -24,10 +27,12 @@ export function SettingsView({
   bindings,
   onChooseFolder,
   onRescan,
+  onCancelScan,
   onAssign,
   onResetBindings,
   onChangeSettings,
-  scanning
+  scanning,
+  scanProgress
 }: SettingsViewProps) {
   const [listening, setListening] = useState<string | null>(null)
 
@@ -104,10 +109,18 @@ export function SettingsView({
           <button className="btn" onClick={onChooseFolder}>
             Change
           </button>
-          <button className="btn" onClick={onRescan} disabled={!root || scanning}>
-            {scanning ? 'Scanning' : 'Rescan'}
-          </button>
+          {scanning ? (
+            <button className="btn" onClick={onCancelScan}>
+              Stop
+            </button>
+          ) : (
+            <button className="btn" onClick={onRescan} disabled={!root}>
+              Rescan
+            </button>
+          )}
         </div>
+
+        {scanning && <ScanProgress progress={scanProgress} />}
         <p className="field-help">
           Rescan after adding or removing files. Your watch history is matched by file
           size and name, so moving a folder keeps your place.
@@ -288,6 +301,38 @@ export function SettingsView({
 
 function preventDefault(e: Event): void {
   e.preventDefault()
+}
+
+/**
+ * What the scan is doing, while it does it.
+ *
+ * A first scan opens every file to read its duration, which takes long enough
+ * on a large folder that a button reading "Scanning" and nothing else is
+ * indistinguishable from the app having hung.
+ */
+function ScanProgress({ progress }: { progress: ScanProgressInfo | null }) {
+  const pct =
+    progress && progress.total > 0
+      ? Math.round((progress.done / progress.total) * 100)
+      : null
+
+  return (
+    <div className="scan-progress">
+      <div className="scan-bar">
+        {/* Before the first file is reported there is no ratio to show, so the
+            bar sweeps rather than sitting empty. */}
+        <div
+          className={pct === null ? 'scan-fill indeterminate' : 'scan-fill'}
+          style={pct === null ? undefined : { width: `${pct}%` }}
+        />
+      </div>
+      <div className="scan-label">
+        {pct === null
+          ? 'Looking through your folders'
+          : `Checking ${progress!.done} of ${progress!.total} files`}
+      </div>
+    </div>
+  )
 }
 
 /** An empty or nonsense box means "keep everything" rather than NaN minutes. */

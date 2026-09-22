@@ -83,9 +83,58 @@ export function enrichInBackground(ctx: AppContext): void {
     })
 }
 
+/**
+ * The scan currently running, if there is one.
+ *
+ * Scanning spawns mpv once per file to read its duration. Two scans at once
+ * would double that for no benefit and make the app noticeably worse to use
+ * while they ran, so a second request joins the first rather than starting
+ * another.
+ */
+let inFlightScan: { promise: Promise<Library>; controller: AbortController } | null = null
+
+/** Stops a scan in progress. The library is left as it was. */
+export function cancelScan(): boolean {
+  if (!inFlightScan) return false
+  inFlightScan.controller.abort()
+  return true
+}
+
 export function registerHandlers(ctx: AppContext): void {
   const handle = (channel: string, fn: (...args: never[]) => unknown): void => {
     ipcMain.handle(channel, (_e, ...args) => (fn as (...a: unknown[]) => unknown)(...args))
+  }
+
+  /** Runs a scan, reporting progress and refusing to start a second one. */
+  const runScan = async (roots: string[]): Promise<Library> => {
+    if (inFlightScan) return inFlightScan.promise
+
+    const controller = new AbortController()
+    const report = (done: number, total: number): void => {
+      if (!ctx.mainWindow.isDestroyed()) {
+        ctx.mainWindow.webContents.send(IPC.scanProgress, { done, total })
+      }
+    }
+
+    const promise = (async () => {
+      try {
+        const library = await scanLibrary(roots, {
+          minimumDurationMinutes: ctx.settings.get().minimumDurationMinutes,
+          onProgress: report,
+          signal: controller.signal
+        })
+        await writeJsonAtomic(libraryFile(), library)
+        ctx.library = library
+        enrichInBackground(ctx)
+        return library
+      } finally {
+        inFlightScan = null
+        report(0, 0)
+      }
+    })()
+
+    inFlightScan = { promise, controller }
+    return promise
   }
 
   handle(IPC.chooseFolder, async () => {
@@ -102,13 +151,7 @@ export function registerHandlers(ctx: AppContext): void {
 
   handle(IPC.setRoots, async (roots: string[]): Promise<Library> => {
     await ctx.settings.setRoots(roots)
-    const library = await scanLibrary(roots, {
-      minimumDurationMinutes: ctx.settings.get().minimumDurationMinutes
-    })
-    await writeJsonAtomic(libraryFile(), library)
-    ctx.library = library
-    enrichInBackground(ctx)
-    return library
+    return runScan(roots)
   })
 
   handle(IPC.getLibrary, async () => {
@@ -117,14 +160,13 @@ export function registerHandlers(ctx: AppContext): void {
     return library
   })
 
-  handle(IPC.rescan, async (): Promise<Library> => {
-    const library = await scanLibrary(ctx.settings.get().libraryRoots, {
-      minimumDurationMinutes: ctx.settings.get().minimumDurationMinutes
-    })
-    await writeJsonAtomic(libraryFile(), library)
-    ctx.library = library
-    enrichInBackground(ctx)
-    return library
+  handle(IPC.rescan, () => runScan(ctx.settings.get().libraryRoots))
+
+  // Stopping is answered with the library that is already loaded, so the
+  // caller has something to show rather than an error to handle.
+  handle(IPC.cancelScan, async (): Promise<Library | null> => {
+    cancelScan()
+    return ctx.library
   })
 
   handle(IPC.getProgress, () => ctx.progress.all())

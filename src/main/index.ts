@@ -8,7 +8,9 @@ import { startNativeHook } from './input/nativeHook'
 import { findNext, findPrevious } from './library/playQueue'
 import { SleepTimer } from './player/sleepTimer'
 import { chooseAudioTrack, chooseSubtitleTrack } from './player/trackChoice'
+import { killRunningProbes } from './library/mediaProbe'
 import {
+  cancelScan,
   enrichInBackground,
   loadExternalSubtitles,
   playItem,
@@ -397,6 +399,12 @@ app.on('window-all-closed', () => app.quit())
 
 app.on('before-quit', () => {
   stopHook?.()
+  // A scan spawns mpv once per file to read its duration. Those children are
+  // not part of this process's tree once it is gone, so quitting mid-scan
+  // would leave them running with nothing left to report to.
+  cancelScan()
+  const orphans = killRunningProbes()
+  if (orphans > 0) console.log(`[scan] stopped ${orphans} probe(s) on quit`)
   if (!ctx) return
   void ctx.progress.save()
   ctx.mpv.dispose()

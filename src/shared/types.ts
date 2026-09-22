@@ -210,6 +210,10 @@ export interface CassetteApi {
   setRoots: (roots: string[]) => Promise<Library>
   getLibrary: () => Promise<Library | null>
   rescan: () => Promise<Library>
+  /** Stops a scan in progress; resolves with the library as it was. */
+  cancelScan: () => Promise<Library | null>
+  /** Fires as a scan works through the files it found. */
+  onScanProgress: (cb: (p: ScanProgressInfo) => void) => () => void
   getProgress: () => Promise<ProgressRecord[]>
 
   play: (path: string, key: string) => Promise<void>
@@ -274,6 +278,8 @@ export const IPC = {
   setRoots: 'app:setRoots',
   getLibrary: 'app:getLibrary',
   rescan: 'app:rescan',
+  cancelScan: 'app:cancelScan',
+  scanProgress: 'app:scanProgress',
   getProgress: 'app:getProgress',
   play: 'player:play',
   stop: 'player:stop',
@@ -394,6 +400,12 @@ export interface SubtitleScanResult {
   label: string
   status: 'has-embedded' | 'already-had-one' | 'downloaded' | 'nothing-found' | 'failed'
   detail?: string
+}
+
+/** How far a library scan has got. Both zero means it is not running. */
+export interface ScanProgressInfo {
+  done: number
+  total: number
 }
 
 /** True where the build supplies a working key of its own. */

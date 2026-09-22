@@ -58,6 +58,24 @@ export class MediaProbe {
   }
 }
 
+/**
+ * Every probe process currently running.
+ *
+ * Probing spawns mpv once per file, and a scan interrupted by quitting the app
+ * would otherwise leave those children running with nothing to report to —
+ * they are not in the app's process tree once it is gone, so nothing would
+ * ever clean them up.
+ */
+const running = new Set<ReturnType<typeof spawn>>()
+
+/** Stops any probe in flight. Called when the app is on its way out. */
+export function killRunningProbes(): number {
+  const count = running.size
+  for (const child of running) child.kill()
+  running.clear()
+  return count
+}
+
 /** Opens the file, decodes nothing, and reads what mpv prints about it. */
 function runMpvProbe(path: string): Promise<ProbeResult> {
   return new Promise((resolve) => {
@@ -77,6 +95,8 @@ function runMpvProbe(path: string): Promise<ProbeResult> {
       { stdio: ['ignore', 'pipe', 'pipe'] }
     )
 
+    running.add(child)
+
     let text = ''
     child.stdout.on('data', (chunk: Buffer) => (text += chunk.toString()))
     child.stderr.on('data', (chunk: Buffer) => (text += chunk.toString()))
@@ -86,6 +106,7 @@ function runMpvProbe(path: string): Promise<ProbeResult> {
 
     const finish = (): void => {
       clearTimeout(timer)
+      running.delete(child)
       resolve({
         durationSeconds: parseDuration(text),
         subtitles: parseTrackList(text)

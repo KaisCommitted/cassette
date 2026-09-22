@@ -30,6 +30,21 @@ export function scheduleTestCapture(window: BrowserWindow): void {
           await new Promise((resolve) => setTimeout(resolve, 600))
         }
 
+        // Some states only exist while something is happening — a scan in
+        // progress, for one — so a check has to press the button that starts
+        // it. A selector rather than arbitrary script: this only ever clicks.
+        const click = process.env.CASSETTE_CAPTURE_CLICK
+        if (click) {
+          const [selector, waitMs] = click.split('@')
+          const hit = await window.webContents.executeJavaScript(
+            `(() => { const el = [...document.querySelectorAll('button')]
+                 .find((b) => b.textContent.trim() === ${JSON.stringify(selector)});
+               if (!el) return false; el.click(); return true; })()`
+          )
+          console.log(`[capture] clicked ${selector}: ${hit ? 'yes' : 'not found'}`)
+          await new Promise((resolve) => setTimeout(resolve, Number(waitMs) || 800))
+        }
+
         // Anything below the fold needs the page moved to it first.
         const scroll = process.env.CASSETTE_CAPTURE_SCROLL
         if (scroll) {

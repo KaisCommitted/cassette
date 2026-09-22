@@ -5,6 +5,8 @@ import { MEDIA_EXTENSIONS } from '@shared/types'
 export interface WalkedFile {
   path: string
   sizeBytes: number
+  /** Last write time, used to spot files still being downloaded. */
+  modifiedMs: number
 }
 
 const SKIP_NAME = /^(desktop\.ini|thumbs\.db|\..*)$/i
@@ -29,7 +31,7 @@ async function walkDir(dir: string, out: WalkedFile[]): Promise<void> {
       await walkDir(full, out)
     } else if (entry.isFile() && isMedia(entry.name) && !SKIP_CONTAINS.test(entry.name)) {
       const info = await stat(full)
-      out.push({ path: full, sizeBytes: info.size })
+      out.push({ path: full, sizeBytes: info.size, modifiedMs: info.mtimeMs })
     }
   }
 }

@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import {
   IPC,
   type BundledKeyAvailability,
+  type ScanProgressInfo,
   type Library,
   type CassetteApi,
   type MetadataSnapshot,
@@ -29,6 +30,8 @@ const api: CassetteApi = {
   setRoots: (roots) => invoke<Library>(IPC.setRoots, roots),
   getLibrary: () => invoke<Library | null>(IPC.getLibrary),
   rescan: () => invoke<Library>(IPC.rescan),
+  cancelScan: () => invoke<Library | null>(IPC.cancelScan),
+  onScanProgress: (cb) => subscribe<ScanProgressInfo>(IPC.scanProgress, cb),
   getProgress: () => invoke<ProgressRecord[]>(IPC.getProgress),
 
   play: (path, key) => invoke<void>(IPC.play, path, key),
