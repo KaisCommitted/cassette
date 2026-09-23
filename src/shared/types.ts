@@ -266,6 +266,11 @@ export interface CassetteApi {
    */
   setTyping: (typing: boolean) => void
 
+  /**
+   * Fires around a switch in or out of fullscreen: `out` just before the
+   * window changes size, `in` once it has settled.
+   */
+  onScreenTransition: (cb: (phase: 'out' | 'in') => void) => () => void
   /** Fires when the cursor moves over the player, to reveal the controls. */
   onOverlayActivity: (cb: () => void) => () => void
   /** Fires as artwork arrives, and once more when it has all been fetched. */
@@ -304,6 +309,7 @@ export const IPC = {
   nextEpisode: 'player:next',
   previousEpisode: 'player:previous',
   toggleFullscreen: 'player:toggleFullscreen',
+  screenTransition: 'player:screenTransition',
   setOverlayInteractive: 'overlay:setInteractive',
   overlayActivity: 'overlay:activity',
   updateSettings: 'app:updateSettings',
@@ -372,7 +378,16 @@ export const ACTIONS: ActionDefinition[] = [
   { id: 'hideAndPause', label: 'Pause and hide (works anywhere)', group: 'Window' }
 ]
 
-/** VLC's defaults, which is what the app ships with. */
+/**
+ * What the app ships with: VLC's keys for the player, and the mouse left to
+ * itself.
+ *
+ * Nothing is on the mouse by default except double click for fullscreen: a
+ * single click or a scroll landing on the video is too easy to do by
+ * accident. Episodes are moved between with the buttons, not N and P, and the
+ * pause-and-hide key is left for you to choose, since whatever it is also
+ * reaches every other app.
+ */
 export const DEFAULT_BINDINGS: KeyBindings = {
   'key:Space': 'playPause',
   'key:f': 'toggleFullscreen',
@@ -387,16 +402,10 @@ export const DEFAULT_BINDINGS: KeyBindings = {
   'key:b': 'cycleAudioTrack',
   'key:g': 'subtitleDelayDown',
   'key:h': 'subtitleDelayUp',
-  'key:n': 'nextEpisode',
-  'key:p': 'previousEpisode',
   'key:+': 'speedUp',
   'key:-': 'speedDown',
   'key:Escape': 'stop',
-  'mouse:left': 'playPause',
-  'mouse:wheelUp': 'volumeUp',
-  'mouse:wheelDown': 'volumeDown',
-  'mouse:double': 'toggleFullscreen',
-  'key:Ctrl+Alt+Space': 'hideAndPause'
+  'mouse:double': 'toggleFullscreen'
 }
 
 

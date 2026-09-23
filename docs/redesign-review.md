@@ -148,8 +148,11 @@ overlay; each screen has its own file under `src/renderer/src/styles/`.
 ## Motion
 
 Every transition answers something you did — hover, press, open, arrive —
-and runs in 120–180 ms. The one entrance is a 180 ms settle when a page
-changes. The only looping animations run while something is being waited on:
+and runs in 120–180 ms. Changing screens is one 260 ms view transition of the
+page alone — forward slides in from the right, back from the left, so going
+into a series and coming out read as opposites — while the top bar stays
+still. Going in or out of fullscreen dips the picture to black for the moment
+the window changes size, so the jump is never seen. The only looping animations run while something is being waited on:
 the scan bar before the first count, a subtitle search, a file opening.
 `prefers-reduced-motion` cuts all of it to an instant, and the waiting
 indicators become still.

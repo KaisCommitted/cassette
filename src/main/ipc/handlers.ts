@@ -81,6 +81,65 @@ export async function stopPlayback(ctx: AppContext): Promise<void> {
 }
 
 
+/** How long the picture takes to dip to black before the window changes size. */
+const DIP_MS = 110
+/**
+ * How long the picture stays covered after the switch has finished: long
+ * enough for mpv to scale to the new size, and for a paused frame to be drawn
+ * again (see redrawIfPaused in index.ts), so neither shows.
+ */
+const SETTLE_MS = 340
+
+let switchingScreen = false
+
+/**
+ * Goes in or out of fullscreen behind a quick dip to black.
+ *
+ * Fullscreen is the operating system resizing the window at once, and mpv
+ * scales its picture a moment later, so the switch itself shows as a jump
+ * with a frame or two of the old size stretched across the new one. The
+ * overlay covers the picture for that moment and fades it back in, which is
+ * what makes it read as one movement rather than a glitch. Outside the player
+ * there is no picture to cover, so it is a plain switch.
+ */
+export async function toggleFullscreen(ctx: AppContext): Promise<void> {
+  if (switchingScreen) return
+  const next = !ctx.mainWindow.isFullScreen()
+  const apply = (): void => {
+    ctx.mainWindow.setFullScreen(next)
+    ctx.mpv.setFullscreen(next)
+  }
+  const playing = Boolean(ctx.mpv.getState().path) && ctx.overlayWindow.isVisible()
+  if (!playing) return apply()
+
+  switchingScreen = true
+  const tell = (phase: 'out' | 'in'): void => {
+    if (!ctx.overlayWindow.isDestroyed()) ctx.overlayWindow.webContents.send(IPC.screenTransition, phase)
+  }
+  try {
+    tell('out')
+    await wait(DIP_MS)
+    const settled = new Promise<void>((resolve) => {
+      // Two calls rather than a ternary: BrowserWindow.once is overloaded per
+      // event name, so a union of the two names matches neither overload.
+      if (next) ctx.mainWindow.once('enter-full-screen', () => resolve())
+      else ctx.mainWindow.once('leave-full-screen', () => resolve())
+    })
+    apply()
+    // The event is the OS saying it is done; a timeout keeps a missed one
+    // from leaving the picture covered.
+    await Promise.race([settled, wait(1200)])
+    await wait(SETTLE_MS)
+  } finally {
+    tell('in')
+    switchingScreen = false
+  }
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 /** How often artwork found so far is handed to the library while a lookup runs. */
 const PARTIAL_SNAPSHOT_MS = 2000
 
@@ -231,11 +290,7 @@ export function registerHandlers(ctx: AppContext): void {
     if (previous) await playItem(ctx, previous)
   })
 
-  handle(IPC.toggleFullscreen, () => {
-    const next = !ctx.mainWindow.isFullScreen()
-    ctx.mainWindow.setFullScreen(next)
-    ctx.mpv.setFullscreen(next)
-  })
+  handle(IPC.toggleFullscreen, () => toggleFullscreen(ctx))
 
   handle(IPC.updateSettings, async (changes: Partial<Settings>) => {
     const next = await ctx.settings.patch(changes)

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import type {
   KeyBindings,
   MetadataProgressInfo,
@@ -31,6 +32,25 @@ function isTextEntry(element: Element | null): boolean {
     element instanceof HTMLTextAreaElement ||
     (element instanceof HTMLElement && element.isContentEditable)
   )
+}
+
+/**
+ * Moves between screens as one motion rather than a cut.
+ *
+ * The browser's view transitions hold a picture of the old screen, apply the
+ * change, and cross between the two; forward slides the new screen in from
+ * the right, back from the left, so going into a series and coming out of it
+ * read as opposites. It costs one short full-window animation per navigation
+ * and nothing in between. Reduced motion gets the plain cut.
+ */
+function transitionTo(direction: 'forward' | 'back', update: () => void): void {
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (reduce || typeof document.startViewTransition !== 'function') {
+    update()
+    return
+  }
+  document.documentElement.dataset.nav = direction
+  document.startViewTransition(() => flushSync(update))
 }
 
 /** Where a view's scroll position and focus are remembered. */
@@ -165,8 +185,10 @@ export function App() {
     (next: View, focus: string | null = null) => {
       const main = mainRef.current
       if (main) scrollMemory.current.set(currentKey, main.scrollTop)
-      pendingFocus.current = focus
-      setView(next)
+      transitionTo(next.name === 'home' ? 'back' : 'forward', () => {
+        pendingFocus.current = focus
+        setView(next)
+      })
     },
     [currentKey]
   )

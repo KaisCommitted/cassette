@@ -532,6 +532,26 @@ p {
   background: oklch(0.906 0.02 80 / 0.1);
 }
 
+/* ---- fullscreen switch ---- */
+
+/*
+ * A dip to black while the window changes size: quick going down, slower
+ * coming back up, so the picture reappears at its new size rather than
+ * jumping to it.
+ */
+.osd-dip {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 260ms var(--ease-out);
+}
+.osd-dip.is-on {
+  opacity: 1;
+  transition-duration: 100ms;
+}
+
 /* ---- opening a file ---- */
 
 .osd-loading {

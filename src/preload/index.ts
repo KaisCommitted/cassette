@@ -84,6 +84,7 @@ const api: CassetteApi = {
   setTyping: (typing) => {
     ipcRenderer.send(IPC.setTyping, typing)
   },
+  onScreenTransition: (cb) => subscribe<'out' | 'in'>(IPC.screenTransition, cb),
   onMetadataProgress: (cb) => subscribe<MetadataProgressInfo>(IPC.metadataProgress, cb),
 
   onPlaybackState: (cb) => {

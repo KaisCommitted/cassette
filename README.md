@@ -43,10 +43,11 @@ several languages and it fetches one of each, so you can switch between them
 while watching. Size, colour, outline, background and position are all
 adjustable.
 
-**Controls that stay out of the way.** VLC's key bindings by default, all
-rebindable, and the same for mouse buttons — anything bindable to a key is
-bindable to a side button. One optional binding works while the app is not
-focused: it pauses and hides, and brings you back where you were.
+**Controls that stay out of the way.** VLC's keys by default, all rebindable,
+and the same for mouse buttons — anything bindable to a key is bindable to a
+side button. Bindings only act in the player, so typing in the library is
+never taken over. One optional binding works while the app is not focused: it
+pauses and hides, and brings you back where you were.
 
 **For watching late.** A sleep timer pauses after a set time or at the end of
 the current episode. Night mode evens out quiet dialogue and loud scenes.

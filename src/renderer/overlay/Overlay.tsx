@@ -12,9 +12,12 @@ export function Overlay() {
   const [state, setState] = useState<PlaybackState | null>(null)
   const [visible, setVisible] = useState(true)
   const [menuOpen, setMenuOpen] = useState(false)
+  /** True while the window changes between fullscreen and not. */
+  const [dipped, setDipped] = useState(false)
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => window.cassette.onPlaybackState(setState), [])
+  useEffect(() => window.cassette.onScreenTransition((phase) => setDipped(phase === 'out')), [])
 
   const playing = Boolean(state?.path)
   const nowPlaying = useNowPlaying(state?.path ?? null, state?.label ?? '')
@@ -84,6 +87,9 @@ export function Overlay() {
       </div>
 
       <ControlBar state={state} shown={shown} onMenuOpenChange={setMenuOpen} onActivity={wake} />
+
+      {/* Covers the jump between window sizes; see toggleFullscreen in main. */}
+      <div className={dipped ? 'osd-dip is-on' : 'osd-dip'} aria-hidden="true" />
     </div>
   )
 }

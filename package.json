@@ -48,7 +48,14 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Cassette",
-      "artifactName": "${productName}-Setup.${ext}"
+      "artifactName": "${productName}-Setup.${ext}",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/uninstallerSidebar.bmp",
+      "installerHeader": "build/installerHeader.bmp",
+      "include": "build/installer.nsh"
     },
     "publish": [
       {

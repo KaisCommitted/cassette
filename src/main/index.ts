@@ -16,6 +16,7 @@ import {
   playItem,
   registerHandlers,
   stopPlayback,
+  toggleFullscreen,
   type AppContext
 } from './ipc/handlers'
 import { MpvController } from './mpv/mpvController'
@@ -345,12 +346,9 @@ async function bootstrap(): Promise<void> {
           if (previous) await playItem(ctx, previous)
         }
         return
-      case 'toggleFullscreen': {
-        const next = !mainWindow.isFullScreen()
-        mainWindow.setFullScreen(next)
-        mpv.setFullscreen(next)
+      case 'toggleFullscreen':
+        if (ctx) await toggleFullscreen(ctx)
         return
-      }
       case 'hideAndPause':
         await hotkey.trigger()
         return

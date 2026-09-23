@@ -184,7 +184,7 @@ export function ControlsSection({ bindings, onAssign, onUnassign, onReset }: Con
       <div className="bind-reset">
         {confirmReset ? (
           <>
-            <p>This replaces every binding you have added or removed with VLC's defaults.</p>
+            <p>This puts back the bindings Cassette ships with, undoing every one you have added or removed.</p>
             <div className="actions">
               <button
                 className="btn btn-primary btn-sm"
@@ -204,7 +204,7 @@ export function ControlsSection({ bindings, onAssign, onUnassign, onReset }: Con
         ) : (
           <button className="btn btn-ghost" onClick={() => setConfirmReset(true)}>
             <Icon name="rescan" />
-            Restore VLC defaults
+            Restore defaults
           </button>
         )}
       </div>
