@@ -91,10 +91,19 @@
   --r-lg: 10px;
 
   /* ---- motion ---- */
-  /* Quick, and only in answer to something you did. */
-  --t-quick: 120ms;
-  --t-settle: 180ms;
-  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /*
+   * A tape deck, not a phone: things arrive slowly and settle with a long,
+   * soft tail, never overshooting, and leave quicker than they came. Nothing
+   * moves on its own; everything answers something you did. The same curves
+   * drive the scripted motion in shared/motion.ts.
+   */
+  --t-quick: 160ms; /* colour answering the pointer */
+  --t-settle: 280ms; /* something moving a little: a lift, a switch */
+  --t-calm: 480ms; /* something arriving: artwork, a panel */
+  --t-slow: 1100ms; /* the room changing: the ambient colour, a backdrop settling */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.55, 0, 0.75, 0.3);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
 
   /* ---- focus ---- */
   --focus: 0 0 0 2px var(--ink), 0 0 0 4px var(--brass);

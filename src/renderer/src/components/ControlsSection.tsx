@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { AnimatePresence, motion, useIsPresent } from 'motion/react'
 import { ACTIONS, type KeyBindings } from '@shared/types'
 import { describeCaptured, descriptorParts, humaniseDescriptor } from '../inputDescriptors'
 import { Icon } from '../../shared/Icon'
 import { Section } from './SettingsParts'
+import { Reveal } from './Reveal'
+import { arrive, glide, leave } from '../../shared/motion'
 
 export interface ControlsSectionProps {
   bindings: KeyBindings
@@ -108,26 +111,35 @@ export function ControlsSection({ bindings, onAssign, onUnassign, onReset }: Con
                     </span>
                     <span className="bind-keys">
                       {descriptors.length === 0 && <span className="bind-none">Not bound</span>}
-                      {descriptors.map((d) => (
-                        <span
-                          className={d === justAdded ? 'binding is-new' : 'binding'}
-                          key={d}
-                        >
-                          {descriptorParts(d).map((part, i) => (
-                            <kbd className="keycap" key={i}>
-                              {part}
-                            </kbd>
-                          ))}
-                          <button
-                            className="binding-remove"
-                            aria-label={`Remove ${humaniseDescriptor(d)} from ${action.label}`}
-                            title="Remove"
-                            onClick={() => onUnassign(d)}
+                      {/* A binding taken off fades where it was, and the rest
+                          close up; one added settles in beside them. */}
+                      <AnimatePresence initial={false} mode="popLayout">
+                        {descriptors.map((d) => (
+                          <motion.span
+                            className={d === justAdded ? 'binding is-new' : 'binding'}
+                            key={d}
+                            layout="position"
+                            transition={glide}
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1, transition: arrive }}
+                            exit={{ opacity: 0, scale: 0.9, transition: leave }}
                           >
-                            <Icon name="close" />
-                          </button>
-                        </span>
-                      ))}
+                            {descriptorParts(d).map((part, i) => (
+                              <kbd className="keycap" key={i}>
+                                {part}
+                              </kbd>
+                            ))}
+                            <button
+                              className="binding-remove"
+                              aria-label={`Remove ${humaniseDescriptor(d)} from ${action.label}`}
+                              title="Remove"
+                              onClick={() => onUnassign(d)}
+                            >
+                              <Icon name="close" />
+                            </button>
+                          </motion.span>
+                        ))}
+                      </AnimatePresence>
                     </span>
                     <button
                       className="btn btn-quiet btn-sm bind-add"
@@ -143,38 +155,44 @@ export function ControlsSection({ bindings, onAssign, onUnassign, onReset }: Con
                     </button>
                   </div>
 
-                  {isListening && (
-                    <CapturePad
-                      actionLabel={action.label}
-                      onCapture={(d) => commit(d, action.id)}
-                      onCancel={() => setListening(null)}
-                    />
-                  )}
+                  <AnimatePresence initial={false}>
+                    {isListening && (
+                      <Reveal key="capture">
+                        <CapturePad
+                          actionLabel={action.label}
+                          onCapture={(d) => commit(d, action.id)}
+                          onCancel={() => setListening(null)}
+                        />
+                      </Reveal>
+                    )}
 
-                  {pending && (
-                    <div className="bind-conflict" role="alert">
-                      <p>
-                        <strong>{humaniseDescriptor(pending.descriptor)}</strong> is already
-                        used for {actionLabel(pending.heldBy)}.
-                      </p>
-                      <div className="actions">
-                        <button
-                          className="btn btn-primary btn-sm"
-                          autoFocus
-                          onClick={() => {
-                            onAssign(pending.descriptor, pending.actionId)
-                            setJustAdded(pending.descriptor)
-                            setConflict(null)
-                          }}
-                        >
-                          Move it to {action.label.toLowerCase()}
-                        </button>
-                        <button className="btn btn-quiet btn-sm" onClick={() => setConflict(null)}>
-                          Keep it on {actionLabel(pending.heldBy).toLowerCase()}
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                    {pending && (
+                      <Reveal key="conflict">
+                        <div className="bind-conflict" role="alert">
+                          <p>
+                            <strong>{humaniseDescriptor(pending.descriptor)}</strong> is already
+                            used for {actionLabel(pending.heldBy)}.
+                          </p>
+                          <div className="actions">
+                            <button
+                              className="btn btn-primary btn-sm"
+                              autoFocus
+                              onClick={() => {
+                                onAssign(pending.descriptor, pending.actionId)
+                                setJustAdded(pending.descriptor)
+                                setConflict(null)
+                              }}
+                            >
+                              Move it to {action.label.toLowerCase()}
+                            </button>
+                            <button className="btn btn-quiet btn-sm" onClick={() => setConflict(null)}>
+                              Keep it on {actionLabel(pending.heldBy).toLowerCase()}
+                            </button>
+                          </div>
+                        </div>
+                      </Reveal>
+                    )}
+                  </AnimatePresence>
                 </li>
               )
             })}
@@ -238,6 +256,11 @@ function CapturePad({
   // them on every render would also drop a pending single click.
   const handlers = useRef({ onCapture, onCancel })
   handlers.current = { onCapture, onCancel }
+  // While it folds away it is still on the page, but no longer listening:
+  // a key pressed then belongs to the page again.
+  const present = useIsPresent()
+  const listening = useRef(present)
+  listening.current = present
 
   useEffect(() => {
     const onCapture = (d: string): void => handlers.current.onCapture(d)
@@ -248,6 +271,7 @@ function CapturePad({
       )
 
     const onKeyDown = (e: KeyboardEvent): void => {
+      if (!listening.current) return
       // Tab still moves focus, so the buttons below stay reachable from the
       // keyboard. It is not a key anyone binds to a player action.
       if (e.key === 'Tab') return
@@ -260,15 +284,19 @@ function CapturePad({
       }
       onCapture(describeCaptured({ type: 'key', event: e }))
     }
-    const onKeyUp = (e: KeyboardEvent): void => setHeld(modifiers(e))
+    const onKeyUp = (e: KeyboardEvent): void => {
+      if (listening.current) setHeld(modifiers(e))
+    }
 
     // A press anywhere outside this row means you have moved on.
     const onOutside = (e: MouseEvent): void => {
+      if (!listening.current) return
       if (rowRef.current && !rowRef.current.contains(e.target as Node)) onCancel()
     }
 
     const pad = padRef.current
     const onWheel = (e: WheelEvent): void => {
+      if (!listening.current) return
       e.preventDefault()
       onCapture(describeCaptured({ type: 'wheel', event: e }))
     }
@@ -308,6 +336,7 @@ function CapturePad({
         ref={padRef}
         onMouseDown={(e) => {
           e.preventDefault()
+          if (!listening.current) return
           const native = e.nativeEvent
           if (native.button !== 0) {
             onCapture(describeCaptured({ type: 'mouse', event: native }))
@@ -322,7 +351,8 @@ function CapturePad({
           }
           pendingClick.current = setTimeout(() => {
             pendingClick.current = null
-            onCapture('mouse:left')
+            // Cancelled in the meantime: the row is folding away, not listening.
+            if (listening.current) onCapture('mouse:left')
           }, DOUBLE_CLICK_MS)
         }}
         // Side buttons would otherwise also go back or forward.

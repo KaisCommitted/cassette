@@ -1,9 +1,18 @@
-import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+  type Ref
+} from 'react'
+import { AnimatePresence, motion } from 'motion/react'
 import type { PlaybackState } from '@shared/types'
 import { formatTime, trackLabel } from './format'
 import { SeekBar } from './SeekBar'
 import { TrackMenu } from './TrackMenu'
 import { Icon, type IconName } from '../shared/Icon'
+import { arrive, EASE_OUT, glide, leave } from '../shared/motion'
 
 export interface ControlBarProps {
   state: PlaybackState
@@ -29,14 +38,14 @@ export function ControlBar({ state, shown, onMenuOpenChange, onActivity }: Contr
   // Whether the overlay accepts clicks is decided in the main process, which
   // polls the cursor: this window is click-through and non-focusable, so its
   // own enter/leave events are not reliable enough to gate that on.
-  const leave = useCallback(() => setMenu(null), [])
+  const closeMenus = useCallback(() => setMenu(null), [])
   const toggle = (id: Exclude<MenuId, null>): void => setMenu(menu === id ? null : id)
 
   const subs = state.tracks.filter((t) => t.type === 'sub')
   const audio = state.tracks.filter((t) => t.type === 'audio')
 
   return (
-    <div className="osd-bar" onMouseLeave={leave} onMouseMove={onActivity}>
+    <div className="osd-bar" onMouseLeave={closeMenus} onMouseMove={onActivity}>
       <div className="osd-times">
         <span>{formatTime(state.positionSeconds)}</span>
         <span className="osd-times-end">{formatTime(state.durationSeconds)}</span>
@@ -85,17 +94,25 @@ export function ControlBar({ state, shown, onMenuOpenChange, onActivity }: Contr
         <div className="osd-spacer" />
 
         <div className="osd-pills">
-          {state.subtitleDelayMs !== 0 && (
-            <Pill>
-              Subtitles {state.subtitleDelayMs > 0 ? '+' : ''}
-              {state.subtitleDelayMs} ms
-            </Pill>
-          )}
-          {state.speed !== 1 && <Pill>{formatSpeed(state.speed)}</Pill>}
-          {state.sleepRemainingSeconds !== null && (
-            <Pill icon="sleep-timer">Pauses in {formatCountdown(state.sleepRemainingSeconds)}</Pill>
-          )}
-          {state.sleepAfterEpisode && <Pill icon="sleep-timer">Stops after this episode</Pill>}
+          <AnimatePresence initial={false} mode="popLayout">
+            {state.subtitleDelayMs !== 0 && (
+              <Pill key="delay">
+                Subtitles {state.subtitleDelayMs > 0 ? '+' : ''}
+                {state.subtitleDelayMs} ms
+              </Pill>
+            )}
+            {state.speed !== 1 && <Pill key="speed">{formatSpeed(state.speed)}</Pill>}
+            {state.sleepRemainingSeconds !== null && (
+              <Pill key="sleep" icon="sleep-timer">
+                Pauses in {formatCountdown(state.sleepRemainingSeconds)}
+              </Pill>
+            )}
+            {state.sleepAfterEpisode && (
+              <Pill key="after" icon="sleep-timer">
+                Stops after this episode
+              </Pill>
+            )}
+          </AnimatePresence>
         </div>
 
         <div className="osd-group">
@@ -137,126 +154,132 @@ export function ControlBar({ state, shown, onMenuOpenChange, onActivity }: Contr
         </div>
       </div>
 
-      {menu === 'subs' && (
-        <TrackMenu
-          title="Subtitles"
-          onClose={() => setMenu(null)}
-          items={[
-            { id: 'off', label: 'Off', selected: state.subtitleTrackId === null },
-            ...subs.map((t) => ({
+      <AnimatePresence>
+        {menu === 'subs' && (
+          <TrackMenu
+            key="subs"
+            title="Subtitles"
+            onClose={() => setMenu(null)}
+            items={[
+              { id: 'off', label: 'Off', selected: state.subtitleTrackId === null },
+              ...subs.map((t) => ({
+                id: String(t.id),
+                label: trackLabel(t),
+                selected: t.id === state.subtitleTrackId
+              }))
+            ]}
+            onPick={(id) => {
+              void api.setSubtitleTrack(id === 'off' ? null : Number(id))
+              setMenu(null)
+            }}
+            footer={
+              <>
+                <DelayAdjuster
+                  valueMs={state.subtitleDelayMs}
+                  onChange={(ms) => void api.setSubtitleDelay(ms)}
+                />
+                <SubtitleSearch />
+              </>
+            }
+          />
+        )}
+
+        {menu === 'audio' && (
+          <TrackMenu
+            key="audio"
+            title="Audio"
+            onClose={() => setMenu(null)}
+            items={audio.map((t) => ({
               id: String(t.id),
               label: trackLabel(t),
-              selected: t.id === state.subtitleTrackId
-            }))
-          ]}
-          onPick={(id) => {
-            void api.setSubtitleTrack(id === 'off' ? null : Number(id))
-            setMenu(null)
-          }}
-          footer={
-            <>
-              <DelayAdjuster
-                valueMs={state.subtitleDelayMs}
-                onChange={(ms) => void api.setSubtitleDelay(ms)}
-              />
-              <SubtitleSearch />
-            </>
-          }
-        />
-      )}
+              selected: t.id === state.audioTrackId
+            }))}
+            onPick={(id) => {
+              void api.setAudioTrack(Number(id))
+              setMenu(null)
+            }}
+          />
+        )}
 
-      {menu === 'audio' && (
-        <TrackMenu
-          title="Audio"
-          onClose={() => setMenu(null)}
-          items={audio.map((t) => ({
-            id: String(t.id),
-            label: trackLabel(t),
-            selected: t.id === state.audioTrackId
-          }))}
-          onPick={(id) => {
-            void api.setAudioTrack(Number(id))
-            setMenu(null)
-          }}
-        />
-      )}
+        {menu === 'speed' && (
+          <TrackMenu
+            key="speed"
+            title="Speed"
+            layout="grid"
+            onClose={() => setMenu(null)}
+            items={[0.5, 0.75, 1, 1.25, 1.5, 2].map((s) => ({
+              id: String(s),
+              label: s === 1 ? 'Normal' : formatSpeed(s),
+              selected: Math.abs(state.speed - s) < 0.01
+            }))}
+            onPick={(id) => {
+              void api.setSpeed(Number(id))
+              setMenu(null)
+            }}
+          />
+        )}
 
-      {menu === 'speed' && (
-        <TrackMenu
-          title="Speed"
-          layout="grid"
-          onClose={() => setMenu(null)}
-          items={[0.5, 0.75, 1, 1.25, 1.5, 2].map((s) => ({
-            id: String(s),
-            label: s === 1 ? 'Normal' : formatSpeed(s),
-            selected: Math.abs(state.speed - s) < 0.01
-          }))}
-          onPick={(id) => {
-            void api.setSpeed(Number(id))
-            setMenu(null)
-          }}
-        />
-      )}
-
-      {menu === 'sleep' && (
-        <TrackMenu
-          title="Pause playback in"
-          onClose={() => setMenu(null)}
-          note={
-            state.sleepRemainingSeconds !== null
-              ? `Pausing in ${formatCountdown(state.sleepRemainingSeconds)}`
-              : state.sleepAfterEpisode
-                ? 'Stopping after this episode'
-                : null
-          }
-          // Durations sit in a grid, like speeds, so the menu has room for
-          // the night light without scrolling.
-          layout="grid"
-          items={[15, 30, 45, 60, 90, 120].map((mins) => ({
-            id: String(mins * 60),
-            label: formatSleepOption(mins),
-            selected: false
-          }))}
-          onPick={(id) => {
-            void api.setSleepTimer(Number(id))
-            setMenu(null)
-          }}
-          footer={
-            <>
-              <div className="osd-menu-items osd-menu-after-grid">
-                {[
-                  {
-                    id: 'episode',
-                    label: 'At the end of this episode',
-                    selected: state.sleepAfterEpisode,
-                    run: () => api.setSleepAfterEpisode()
-                  },
-                  {
-                    id: 'off',
-                    label: 'Cancel timer',
-                    selected: state.sleepRemainingSeconds === null && !state.sleepAfterEpisode,
-                    run: () => api.setSleepTimer(null)
-                  }
-                ].map((item) => (
-                  <button
-                    key={item.id}
-                    className={item.selected ? 'osd-menu-item is-selected' : 'osd-menu-item'}
-                    aria-pressed={item.selected}
-                    onClick={() => {
-                      void item.run()
-                      setMenu(null)
-                    }}
-                  >
-                    <span className="osd-menu-label">{item.label}</span>
-                    {item.selected && <Icon name="tick" />}
-                  </button>
-                ))}
-              </div>
-              <NightLightSwitch />
-            </>
-          }
-        />
-      )}
+        {menu === 'sleep' && (
+          <TrackMenu
+            key="sleep"
+            title="Pause playback in"
+            onClose={() => setMenu(null)}
+            note={
+              state.sleepRemainingSeconds !== null
+                ? `Pausing in ${formatCountdown(state.sleepRemainingSeconds)}`
+                : state.sleepAfterEpisode
+                  ? 'Stopping after this episode'
+                  : null
+            }
+            // Durations sit in a grid, like speeds, so the menu has room for
+            // the night light without scrolling.
+            layout="grid"
+            items={[15, 30, 45, 60, 90, 120].map((mins) => ({
+              id: String(mins * 60),
+              label: formatSleepOption(mins),
+              selected: false
+            }))}
+            onPick={(id) => {
+              void api.setSleepTimer(Number(id))
+              setMenu(null)
+            }}
+            footer={
+              <>
+                <div className="osd-menu-items osd-menu-after-grid">
+                  {[
+                    {
+                      id: 'episode',
+                      label: 'At the end of this episode',
+                      selected: state.sleepAfterEpisode,
+                      run: () => api.setSleepAfterEpisode()
+                    },
+                    {
+                      id: 'off',
+                      label: 'Cancel timer',
+                      selected: state.sleepRemainingSeconds === null && !state.sleepAfterEpisode,
+                      run: () => api.setSleepTimer(null)
+                    }
+                  ].map((item) => (
+                    <button
+                      key={item.id}
+                      className={item.selected ? 'osd-menu-item is-selected' : 'osd-menu-item'}
+                      aria-pressed={item.selected}
+                      onClick={() => {
+                        void item.run()
+                        setMenu(null)
+                      }}
+                    >
+                      <span className="osd-menu-label">{item.label}</span>
+                      {item.selected && <Icon name="tick" />}
+                    </button>
+                  ))}
+                </div>
+                <NightLightSwitch />
+              </>
+            }
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -440,17 +463,47 @@ function Control({
       aria-label={label}
       aria-expanded={expanded}
     >
-      <Icon name={icon} />
+      {/* A button whose icon changes — play and pause, in and out of
+          fullscreen — lets the old one shrink away as the new one grows in. */}
+      <AnimatePresence initial={false} mode="popLayout">
+        <motion.span
+          key={icon}
+          className="osd-btn-face"
+          initial={{ opacity: 0, scale: 0.6 }}
+          animate={{ opacity: 1, scale: 1, transition: { duration: 0.34, ease: EASE_OUT } }}
+          exit={{ opacity: 0, scale: 0.6, transition: { duration: 0.16 } }}
+        >
+          <Icon name={icon} />
+        </motion.span>
+      </AnimatePresence>
     </button>
   )
 }
 
-function Pill({ children, icon }: { children: ReactNode; icon?: IconName }) {
+/** A running state beside the menus. It slides in, and the others make room. */
+function Pill({
+  children,
+  icon,
+  ref
+}: {
+  children: ReactNode
+  icon?: IconName
+  /** Handed down by AnimatePresence, which lifts a leaving pill out of the row. */
+  ref?: Ref<HTMLSpanElement>
+}) {
   return (
-    <span className="osd-pill">
+    <motion.span
+      ref={ref}
+      className="osd-pill"
+      layout="position"
+      initial={{ opacity: 0, x: 10 }}
+      animate={{ opacity: 1, x: 0, transition: arrive }}
+      exit={{ opacity: 0, transition: leave }}
+      transition={glide}
+    >
       {icon && <Icon name={icon} />}
       {children}
-    </span>
+    </motion.span>
   )
 }
 

@@ -79,13 +79,18 @@ p {
   pointer-events: none;
   opacity: 0;
   transform: translateY(-8px);
+  /* Going: a slow fade, so the controls drift off the picture rather than
+     vanish from it. Coming back is quicker, since you asked for them. */
   transition:
-    opacity var(--t-settle) ease,
-    transform var(--t-settle) var(--ease-out);
+    opacity 900ms var(--ease-in-out),
+    transform 900ms var(--ease-in-out);
 }
 .osd.is-shown .osd-top {
   opacity: 1;
   transform: none;
+  transition:
+    opacity var(--t-calm) var(--ease-out),
+    transform var(--t-calm) var(--ease-out);
 }
 .osd-back {
   display: inline-flex;
@@ -149,15 +154,18 @@ p {
   background: linear-gradient(transparent, oklch(0.17 0.004 85 / 0.62) 42%, oklch(0.17 0.004 85 / 0.94));
   pointer-events: none;
   opacity: 0;
-  transform: translateY(12px);
+  transform: translateY(14px);
   transition:
-    opacity var(--t-settle) ease,
-    transform var(--t-settle) var(--ease-out);
+    opacity 900ms var(--ease-in-out),
+    transform 900ms var(--ease-in-out);
 }
 .osd.is-shown .osd-bar {
   pointer-events: auto;
   opacity: 1;
   transform: none;
+  transition:
+    opacity var(--t-calm) var(--ease-out),
+    transform var(--t-calm) var(--ease-out);
 }
 
 .osd-times {
@@ -253,6 +261,8 @@ p {
 }
 
 .osd-btn {
+  /* Holds a changing icon while the old one leaves (ControlBar's Control). */
+  position: relative;
   display: grid;
   place-items: center;
   width: 40px;
@@ -266,6 +276,10 @@ p {
     border-color var(--t-quick) ease,
     color var(--t-quick) ease,
     transform var(--t-quick) var(--ease-out);
+}
+.osd-btn-face {
+  display: grid;
+  place-items: center;
 }
 .osd-btn .icon {
   width: 22px;
@@ -383,14 +397,9 @@ p {
   border-radius: var(--r-lg);
   background: oklch(0.19 0.004 85 / 0.97);
   box-shadow: 0 16px 40px oklch(0 0 0 / 0.55);
-  animation: menu-in var(--t-quick) var(--ease-out) both;
+  /* Opens up out of the buttons below it, and folds back into them
+     (TrackMenu.tsx). */
   transform-origin: bottom right;
-}
-@keyframes menu-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px) scale(0.98);
-  }
 }
 .osd-menu-head {
   display: flex;
@@ -553,9 +562,9 @@ p {
 /* ---- fullscreen switch ---- */
 
 /*
- * A dip to black while the window changes size: quick going down, slower
- * coming back up, so the picture reappears at its new size rather than
- * jumping to it.
+ * A dip to black while the window changes size, and before the player
+ * closes: a short fade down, then a long, slow one back up, so the picture
+ * seems to come up out of the dark at its new size rather than jump to it.
  */
 .osd-dip {
   position: absolute;
@@ -563,11 +572,11 @@ p {
   background: #000;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 260ms var(--ease-out);
+  transition: opacity 750ms var(--ease-in-out);
 }
 .osd-dip.is-on {
   opacity: 1;
-  transition-duration: 100ms;
+  transition: opacity 200ms var(--ease-in);
 }
 
 /* ---- sleep timer night light ---- */
@@ -692,6 +701,8 @@ p {
   gap: 12px;
   background: oklch(0.17 0.004 85 / 0.88);
   text-align: center;
+  /* Fades up over the dark, and away once the picture is there to take its
+     place (Overlay.tsx). */
 }
 .osd-loading-mark {
   height: 40px;

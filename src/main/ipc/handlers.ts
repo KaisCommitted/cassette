@@ -75,7 +75,31 @@ export async function playItem(
   await ctx.mpv.load(item.path, resumeAt, item.label)
 }
 
+/**
+ * How long the picture takes to fade to black before the player closes. The
+ * library then comes up out of the same black (the veil in App.tsx), so
+ * closing is one dark crossing rather than a cut from picture to page.
+ */
+const CLOSE_DIP_MS = 260
+
+let closing = false
+
 export async function stopPlayback(ctx: AppContext): Promise<void> {
+  // A second Escape while the picture is already going dark is the same close.
+  if (closing) return
+  closing = true
+  try {
+    await closePlayer(ctx)
+  } finally {
+    closing = false
+  }
+}
+
+async function closePlayer(ctx: AppContext): Promise<void> {
+  if (!ctx.overlayWindow.isDestroyed() && ctx.overlayWindow.isVisible()) {
+    ctx.overlayWindow.webContents.send(IPC.screenTransition, 'out')
+    await wait(CLOSE_DIP_MS)
+  }
   await ctx.mpv.stop()
   ctx.endSleep()
   ctx.currentKey = null
@@ -109,7 +133,7 @@ export async function stopPlayback(ctx: AppContext): Promise<void> {
 
 
 /** How long the picture takes to dip to black before the window changes size. */
-const DIP_MS = 110
+const DIP_MS = 200
 /**
  * How long the picture stays covered after the switch has finished: long
  * enough for mpv to scale to the new size, and for a paused frame to be drawn

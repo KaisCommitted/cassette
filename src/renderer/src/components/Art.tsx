@@ -6,6 +6,8 @@ export type ArtKind = 'poster' | 'backdrop' | 'still' | 'still-large'
 
 /** How long to wait before a second attempt at an image that failed. */
 const RETRY_DELAY_MS = 1500
+/** An image that loads this soon after it is asked for was already cached. */
+const INSTANT_MS = 100
 
 /**
  * One image that fades in when it arrives and gets one second chance.
@@ -30,12 +32,21 @@ function ArtImage({
 }) {
   const [attempt, setAttempt] = useState(0)
   const [loaded, setLoaded] = useState(false)
+  /*
+   * Artwork that is already to hand — cached from the last time this screen
+   * was open — is simply there. Fading it in would show the printed sleeve
+   * underneath for a moment on every visit, which reads as the page
+   * redrawing itself; only artwork that actually arrives late fades in.
+   */
+  const [instant, setInstant] = useState(false)
+  const shownAt = useRef(performance.now())
   const retry = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // A new source is a fresh start, not an inherited failure.
   useEffect(() => {
     setAttempt(0)
     setLoaded(false)
+    shownAt.current = performance.now()
     return () => {
       if (retry.current) clearTimeout(retry.current)
     }
@@ -48,13 +59,14 @@ function ArtImage({
   return (
     <img
       key={url}
-      className={loaded ? `${className} is-loaded` : className}
+      className={[className, loaded && 'is-loaded', instant && 'is-instant'].filter(Boolean).join(' ')}
       src={url}
       alt=""
       loading="lazy"
       decoding="async"
       draggable={false}
       onLoad={() => {
+        setInstant(performance.now() - shownAt.current < INSTANT_MS)
         setLoaded(true)
         onLoad?.()
       }}

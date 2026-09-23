@@ -312,6 +312,8 @@ img {
   background: oklch(0.17 0.004 85 / 0.5);
 }
 .segment {
+  position: relative;
+  isolation: isolate;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -331,8 +333,15 @@ img {
   color: var(--cream);
 }
 .segment[aria-pressed='true'] {
-  background: var(--raised);
   color: var(--cream);
+}
+/* What marks the chosen segment, sliding to the next one picked (HomeView). */
+.segment-pill {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: var(--r-md);
+  background: var(--raised);
 }
 .segment-count {
   color: var(--faint);
@@ -415,6 +424,8 @@ kbd {
   justify-items: center;
   gap: 18px;
   color: var(--muted);
+  /* After a pause, so a library that reads quickly never flashes this. */
+  animation: launch-fade 600ms var(--ease-out) 250ms both;
 }
 .loading-mark {
   height: 44px;

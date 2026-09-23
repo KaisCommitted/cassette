@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
 import { Icon } from '../../shared/Icon'
+import { EASE_IN, EASE_OUT } from '../../shared/motion'
 
 type Stage = 'idle' | 'available' | 'downloading' | 'ready'
 
@@ -43,78 +45,91 @@ export function UpdateBanner() {
     }
   }, [])
 
-  if (stage === 'idle' || dismissed) return null
+  const shown = stage !== 'idle' && !dismissed
 
+  // Rises gently into the corner, and sinks away when dismissed.
   return (
-    <aside className="update-card" role="status" aria-live="polite" aria-label="Update">
-      <span className="update-mark" aria-hidden="true">
-        <Icon name="download" />
-      </span>
+    <AnimatePresence>
+      {shown && (
+        <motion.aside
+          className="update-card"
+          role="status"
+          aria-live="polite"
+          aria-label="Update"
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0, transition: { duration: 0.6, ease: EASE_OUT } }}
+          exit={{ opacity: 0, y: 12, transition: { duration: 0.24, ease: EASE_IN } }}
+        >
+          <span className="update-mark" aria-hidden="true">
+            <Icon name="download" />
+          </span>
 
-      <div className="update-body">
-        {stage === 'available' && (
-          <>
-            <p className="update-title">Cassette {version} is ready to install</p>
-            <p className="update-sub">
-              Downloads in the background. Nothing restarts until you say so.
-            </p>
-            <div className="update-actions">
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={() => {
-                  setStage('downloading')
-                  window.cassette.startUpdateDownload()
-                }}
-              >
-                Download
-              </button>
-              <button className="btn btn-quiet btn-sm" onClick={() => setDismissed(true)}>
-                Not now
-              </button>
-            </div>
-          </>
-        )}
+          <div className="update-body">
+            {stage === 'available' && (
+              <>
+                <p className="update-title">Cassette {version} is ready to install</p>
+                <p className="update-sub">
+                  Downloads in the background. Nothing restarts until you say so.
+                </p>
+                <div className="update-actions">
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => {
+                      setStage('downloading')
+                      window.cassette.startUpdateDownload()
+                    }}
+                  >
+                    Download
+                  </button>
+                  <button className="btn btn-quiet btn-sm" onClick={() => setDismissed(true)}>
+                    Not now
+                  </button>
+                </div>
+              </>
+            )}
 
-        {stage === 'downloading' && (
-          <>
-            <p className="update-title">Downloading {version}</p>
-            <span className="update-bar" aria-hidden="true">
-              <span style={{ width: `${percent}%` }} />
-            </span>
-            <p className="update-sub">
-              <span className="update-pct">{percent}%</span> — carry on watching, this runs in
-              the background.
-            </p>
-          </>
-        )}
+            {stage === 'downloading' && (
+              <>
+                <p className="update-title">Downloading {version}</p>
+                <span className="update-bar" aria-hidden="true">
+                  <span style={{ width: `${percent}%` }} />
+                </span>
+                <p className="update-sub">
+                  <span className="update-pct">{percent}%</span> — carry on watching, this runs in
+                  the background.
+                </p>
+              </>
+            )}
 
-        {stage === 'ready' && (
-          <>
-            <p className="update-title">Cassette {version} is downloaded</p>
-            <p className="update-sub">Installing takes a few seconds and reopens the app.</p>
-            <div className="update-actions">
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={() => window.cassette.installUpdate()}
-              >
-                Restart and install
-              </button>
-              <button className="btn btn-quiet btn-sm" onClick={() => setDismissed(true)}>
-                Later
-              </button>
-            </div>
-          </>
-        )}
-      </div>
+            {stage === 'ready' && (
+              <>
+                <p className="update-title">Cassette {version} is downloaded</p>
+                <p className="update-sub">Installing takes a few seconds and reopens the app.</p>
+                <div className="update-actions">
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => window.cassette.installUpdate()}
+                  >
+                    Restart and install
+                  </button>
+                  <button className="btn btn-quiet btn-sm" onClick={() => setDismissed(true)}>
+                    Later
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
 
-      <button
-        className="icon-btn update-close"
-        aria-label="Dismiss"
-        title="Dismiss"
-        onClick={() => setDismissed(true)}
-      >
-        <Icon name="close" />
-      </button>
-    </aside>
+          <button
+            className="icon-btn update-close"
+            aria-label="Dismiss"
+            title="Dismiss"
+            onClick={() => setDismissed(true)}
+          >
+            <Icon name="close" />
+          </button>
+        </motion.aside>
+      )}
+    </AnimatePresence>
   )
 }

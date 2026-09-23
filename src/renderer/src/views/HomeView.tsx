@@ -5,10 +5,12 @@ import type {
   ProgressRecord,
   SeriesEntry
 } from '@shared/types'
+import { AnimatePresence, motion } from 'motion/react'
 import { FrameArt, PosterArt, ProgressSeam } from '../components/Art'
 import { Clamp } from '../components/Clamp'
 import { Icon } from '../../shared/Icon'
 import { formatTime } from '../../overlay/format'
+import { arrive, glide, leave } from '../../shared/motion'
 import {
   continueWatching,
   episodeLabel,
@@ -132,53 +134,64 @@ export function HomeView(props: HomeViewProps) {
         </div>
       )}
 
-      {showSeries && series.length > 0 && (
-        <section className="shelf" aria-labelledby="shelf-series">
-          <div className="shelf-head">
-            <h2 className="shelf-title" id="shelf-series">
-              Series
-            </h2>
-            <span className="shelf-count">
-              {series.length === 1 ? '1 series' : `${series.length} series`}
-            </span>
-          </div>
-          <div className="poster-grid">
-            {series.map((entry) => (
-              <SeriesTile
-                key={entry.id}
-                entry={entry}
-                progress={progress}
-                metadata={metadata}
-                onClick={() => props.onOpenSeries(entry.id)}
-              />
-            ))}
-          </div>
-        </section>
-      )}
+      {/* Changing what the shelf shows lets the old shelves fade away before
+          the new ones rise in, rather than swapping the page under you. */}
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={scope}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0, transition: arrive }}
+          exit={{ opacity: 0, transition: leave }}
+        >
+          {showSeries && series.length > 0 && (
+            <section className="shelf" aria-labelledby="shelf-series">
+              <div className="shelf-head">
+                <h2 className="shelf-title" id="shelf-series">
+                  Series
+                </h2>
+                <span className="shelf-count">
+                  {series.length === 1 ? '1 series' : `${series.length} series`}
+                </span>
+              </div>
+              <div className="poster-grid">
+                {series.map((entry) => (
+                  <SeriesTile
+                    key={entry.id}
+                    entry={entry}
+                    progress={progress}
+                    metadata={metadata}
+                    onClick={() => props.onOpenSeries(entry.id)}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
 
-      {showFilms && movies.length > 0 && (
-        <section className="shelf" aria-labelledby="shelf-films">
-          <div className="shelf-head">
-            <h2 className="shelf-title" id="shelf-films">
-              Films
-            </h2>
-            <span className="shelf-count">
-              {movies.length === 1 ? '1 film' : `${movies.length} films`}
-            </span>
-          </div>
-          <div className="poster-grid">
-            {movies.map((movie) => (
-              <FilmTile
-                key={movie.id}
-                movie={movie}
-                record={progress.get(movie.file.key)}
-                metadata={metadata}
-                onClick={() => props.onPlay(movie.file.path, movie.file.key)}
-              />
-            ))}
-          </div>
-        </section>
-      )}
+          {showFilms && movies.length > 0 && (
+            <section className="shelf" aria-labelledby="shelf-films">
+              <div className="shelf-head">
+                <h2 className="shelf-title" id="shelf-films">
+                  Films
+                </h2>
+                <span className="shelf-count">
+                  {movies.length === 1 ? '1 film' : `${movies.length} films`}
+                </span>
+              </div>
+              <div className="poster-grid">
+                {movies.map((movie) => (
+                  <FilmTile
+                    key={movie.id}
+                    movie={movie}
+                    record={progress.get(movie.file.key)}
+                    metadata={metadata}
+                    onClick={() => props.onPlay(movie.file.path, movie.file.key)}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+        </motion.div>
+      </AnimatePresence>
     </div>
   )
 }
@@ -468,6 +481,10 @@ function ScopeBar({
             aria-pressed={scope === option.id}
             onClick={() => onChange(option.id)}
           >
+            {/* One marker, which slides to the segment picked. */}
+            {scope === option.id && (
+              <motion.span layoutId="scope-pill" className="segment-pill" transition={glide} />
+            )}
             {option.label}
             <span className="segment-count">{option.count}</span>
           </button>

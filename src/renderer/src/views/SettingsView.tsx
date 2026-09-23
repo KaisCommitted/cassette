@@ -1,4 +1,5 @@
-import { useEffect, useState, type RefObject } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
+import { motion } from 'motion/react'
 import {
   type BundledKeyAvailability,
   type KeyBindings,
@@ -12,6 +13,7 @@ import { DraftInput, Section, SwitchRow } from '../components/SettingsParts'
 import { ControlsSection } from '../components/ControlsSection'
 import { Icon, Logo } from '../../shared/Icon'
 import { formatAgo } from '../select'
+import { glide, prefersReducedMotion } from '../../shared/motion'
 
 export interface SettingsViewProps {
   settings: Settings | null
@@ -57,11 +59,14 @@ export function SettingsView(props: SettingsViewProps) {
 
   // The contents list follows the section you are reading.
   const [active, setActive] = useState<string>(SECTIONS[0].id)
+  /** A jump from the contents is gliding there; it already knows where it is going. */
+  const jumping = useRef(false)
   useEffect(() => {
     const root = scrollRoot.current
     if (!root) return
     const observer = new IntersectionObserver(
       (entries) => {
+        if (jumping.current) return
         const visible = entries.filter((e) => e.isIntersecting)
         if (visible[0]) setActive(visible[0].target.id.replace('settings-', ''))
       },
@@ -77,9 +82,20 @@ export function SettingsView(props: SettingsViewProps) {
   const jump = (id: string): void => {
     const section = document.getElementById(`settings-${id}`)
     if (!section) return
-    section.scrollIntoView({ block: 'start' })
+    // Glides there rather than jumping, with the marker going straight to
+    // the section asked for instead of stopping at each one on the way.
+    const smooth = !prefersReducedMotion()
+    section.scrollIntoView({ block: 'start', behavior: smooth ? 'smooth' : 'auto' })
     section.querySelector<HTMLElement>('h2')?.focus({ preventScroll: true })
     setActive(id)
+    if (!smooth) return
+    jumping.current = true
+    const done = (): void => {
+      jumping.current = false
+    }
+    // A section already in place never scrolls, so never ends a scroll.
+    scrollRoot.current?.addEventListener('scrollend', done, { once: true })
+    setTimeout(done, 1200)
   }
 
   return (
@@ -100,6 +116,13 @@ export function SettingsView(props: SettingsViewProps) {
               aria-current={active === s.id ? 'true' : undefined}
               onClick={() => jump(s.id)}
             >
+              {active === s.id && (
+                <motion.span
+                  layoutId="settings-nav-marker"
+                  className="settings-nav-marker"
+                  transition={glide}
+                />
+              )}
               {s.title}
             </button>
           ))}

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
 import type { PlaybackState } from '@shared/types'
 import { ControlBar } from './ControlBar'
 import { describeMouse } from './format'
 import { useNowPlaying } from './useNowPlaying'
 import { Icon, Logo } from '../shared/Icon'
+import { EASE_IN_OUT, EASE_OUT } from '../shared/motion'
 
 /** Controls fade out after this long without pointer movement. */
 const IDLE_HIDE_MS = 2600
@@ -11,6 +13,12 @@ const IDLE_HIDE_MS = 2600
 const NIGHT_DIM_MAX = 0.6
 /** How long the subtitle delay stays on screen after the last change. */
 const DELAY_TOAST_MS = 1600
+/**
+ * How long after a file reports itself open before its picture is brought
+ * up: long enough for the resumed frame to be drawn, so what fades up is the
+ * scene and not a flash of the first frame.
+ */
+const ARRIVE_SETTLE_MS = 220
 
 export function Overlay() {
   const [state, setState] = useState<PlaybackState | null>(null)
@@ -24,6 +32,27 @@ export function Overlay() {
   useEffect(() => window.cassette.onScreenTransition((phase) => setDipped(phase === 'out')), [])
 
   const playing = Boolean(state?.path)
+
+  // Closing the player dips to black and never comes back up (the window is
+  // hidden instead), so the next file must not open on a black screen.
+  useEffect(() => {
+    if (!playing) setDipped(false)
+  }, [playing])
+
+  // The player opens in the dark the library went down into, and its first
+  // picture comes up out of it once there is one, rather than cutting in.
+  const [arriving, setArriving] = useState(true)
+  const loading = state?.loading ?? false
+  useEffect(() => {
+    if (!playing) {
+      setArriving(true)
+      return
+    }
+    if (loading) return
+    const timer = setTimeout(() => setArriving(false), ARRIVE_SETTLE_MS)
+    return () => clearTimeout(timer)
+  }, [playing, loading])
+
   const nowPlaying = useNowPlaying(state?.path ?? null, state?.label ?? '')
   const delayToast = useDelayToast(state?.subtitleDelayMs ?? null, state?.path ?? null)
 
@@ -81,7 +110,12 @@ export function Overlay() {
         aria-hidden="true"
       />
 
-      {state.loading && <LoadingScreen title={nowPlaying.title} detail={nowPlaying.detail} />}
+      {/* Under the loading screen and the controls, so both show over it. */}
+      <div className={arriving ? 'osd-dip is-on' : 'osd-dip'} aria-hidden="true" />
+
+      <AnimatePresence>
+        {state.loading && <LoadingScreen title={nowPlaying.title} detail={nowPlaying.detail} />}
+      </AnimatePresence>
 
       {/* Nudging the subtitles is usually done by key with the controls
           hidden, so the new offset shows on its own, whatever the bar is doing. */}
@@ -169,13 +203,24 @@ function formatDelay(ms: number): string {
   return `${ms > 0 ? '+' : '−'}${Math.abs(ms)} ms`
 }
 
+/**
+ * What shows while a file opens. It comes up gently out of the dark the
+ * library went down into, and when the picture arrives it fades away slowly,
+ * so the first frame seems to surface through it rather than cut in.
+ */
 function LoadingScreen({ title, detail }: { title: string; detail: string | null }) {
   return (
-    <div className="osd-loading" role="status">
+    <motion.div
+      className="osd-loading"
+      role="status"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1, transition: { duration: 0.5, ease: EASE_OUT, delay: 0.08 } }}
+      exit={{ opacity: 0, transition: { duration: 0.9, ease: EASE_IN_OUT } }}
+    >
       <Logo variant="mark" className="osd-loading-mark" />
       <span className="osd-spinner" aria-hidden="true" />
       <p className="osd-loading-title">{title}</p>
       {detail && <p className="osd-loading-detail">{detail}</p>}
-    </div>
+    </motion.div>
   )
 }

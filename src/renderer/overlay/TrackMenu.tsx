@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
+import { motion } from 'motion/react'
 import { Icon } from '../shared/Icon'
+import { arrive, leave } from '../shared/motion'
 
 export interface TrackMenuItem {
   id: string
@@ -28,8 +30,17 @@ export function TrackMenu({
   note,
   layout = 'list'
 }: TrackMenuProps) {
+  // Rises out of the buttons it was opened from and sinks back into them.
+  // Switching straight to another menu crosses the two over in place.
   return (
-    <div className="osd-menu" role="dialog" aria-label={title}>
+    <motion.div
+      className="osd-menu"
+      role="dialog"
+      aria-label={title}
+      initial={{ opacity: 0, y: 10, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1, transition: arrive }}
+      exit={{ opacity: 0, y: 6, scale: 0.98, transition: leave }}
+    >
       <div className="osd-menu-head">
         <h2 className="osd-menu-title">{title}</h2>
         <button className="osd-small" onClick={onClose} aria-label="Close" title="Close">
@@ -58,6 +69,6 @@ export function TrackMenu({
       )}
 
       {footer}
-    </div>
+    </motion.div>
   )
 }

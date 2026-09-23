@@ -31,6 +31,7 @@
 }
 .settings-nav-link {
   position: relative;
+  isolation: isolate;
   height: 34px;
   padding: 0 12px;
   border: 0;
@@ -50,9 +51,17 @@
 }
 .settings-nav-link[aria-current='true'] {
   color: var(--cream);
+}
+/* The marker behind the section you are reading. There is one, and it
+   glides along the list as you scroll or jump (SettingsView.tsx). */
+.settings-nav-marker {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: var(--r-md);
   background: var(--raised);
 }
-.settings-nav-link[aria-current='true']::before {
+.settings-nav-marker::before {
   content: '';
   position: absolute;
   left: 0;
@@ -312,7 +321,7 @@ label.setting-row {
 .bind-row {
   border-bottom: 1px solid var(--line);
   border-radius: var(--r-sm);
-  transition: background-color var(--t-quick) ease;
+  transition: background-color var(--t-settle) ease;
 }
 .bind-row.is-open {
   background: oklch(0.752 0.118 82 / 0.07);
@@ -335,6 +344,7 @@ label.setting-row {
   font-size: var(--text-xs);
 }
 .bind-keys {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -416,12 +426,12 @@ label.setting-row {
 }
 
 /* The listening row: what to press, and a pad for the mouse. */
+/* Opened and closed by unfolding (the Reveal in ControlsSection.tsx). */
 .capture,
 .bind-conflict {
   display: grid;
   gap: 12px;
   padding: 4px 10px 14px;
-  animation: page-in var(--t-settle) var(--ease-out) both;
 }
 .capture-prompt {
   display: flex;

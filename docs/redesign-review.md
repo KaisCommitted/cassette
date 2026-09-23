@@ -162,15 +162,46 @@ overlay; each screen has its own file under `src/renderer/src/styles/`.
 
 ## Motion
 
-Every transition answers something you did — hover, press, open, arrive —
-and runs in 120–180 ms. Changing screens is one 260 ms view transition of the
-page alone — forward slides in from the right, back from the left, so going
-into a series and coming out read as opposites — while the top bar stays
-still. Going in or out of fullscreen dips the picture to black for the moment
-the window changes size, so the jump is never seen. The only looping animations run while something is being waited on:
-the scan bar before the first count, a subtitle search, a file opening.
-`prefers-reduced-motion` cuts all of it to an instant, and the waiting
-indicators become still.
+A tape deck, not a phone: things arrive slowly and settle with a long, soft
+tail, never overshoot, and leave quicker than they came. Every transition
+answers something you did — hover, press, open, arrive — apart from one short
+cascade when the library first appears. The curves and lengths are tokens
+(`--t-quick` 160 ms for colour, `--t-settle` 280 ms for small moves,
+`--t-calm` 480 ms for arrivals, `--t-slow` for the room changing) shared
+with the scripted side in `src/renderer/shared/motion.ts`. CSS carries
+hovers and state; [Motion](https://motion.dev) carries what CSS cannot:
+things leaving (menus, panels, chips, Back), one marker sliding between
+choices (season underline, the Everything/Series/Films pill, the settings
+contents), and rows unfolding to their height.
+
+- **Screens** change in one view transition of the page alone: the old one
+  drifts and fades in 220 ms, the new one follows a beat later and settles
+  over 560 ms. Forward drifts left, back drifts right. The top bar changes
+  live rather than as a picture, and the mark slides over as Back comes and
+  goes.
+- **Playing** is lights down, lights up. Pressing play fades the library to
+  black before the player opens; the player's first picture comes up out of
+  the black once it is drawn. Closing fades the picture to black before the
+  player goes, and the library — already on the episode you were watching,
+  with a slow brass wash over its row — comes up out of the same black. The
+  whole trip has no cut in it.
+- **Fullscreen** dips the picture to black while the window changes size,
+  200 ms down and 750 ms back up, so the jump is never seen.
+- **The controls** fade in within half a second and drift away over most of
+  a second. Menus rise out of the buttons and sink back; switching menus
+  crosses them over. Play and pause, and the fullscreen icon, shrink one
+  glyph away as the other grows in.
+- **Hover**: a tape lifts off the shelf and its picture leans in, slowly
+  (1.4 s); the press is quick. Artwork that arrives late fades in; artwork
+  already cached is simply there, so the printed sleeve never flashes
+  through on a return visit. A series' backdrop settles back into its frame
+  as it arrives. The page's ambient colour blends to the next film's rather
+  than switching.
+
+The only looping animations run while something is being waited on: the
+scan bar before the first count, a subtitle search, a file opening.
+`prefers-reduced-motion` cuts all of it to an instant (Motion follows the
+same setting), and the waiting indicators become still.
 
 ## From 1000px to 4K
 

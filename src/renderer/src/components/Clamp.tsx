@@ -1,4 +1,9 @@
 import { useLayoutEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
+import { prefersReducedMotion } from '../../shared/motion'
+
+/** Opening and closing unfold the paragraph rather than jump it. */
+const UNFOLD = { duration: 460, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }
 
 /**
  * A paragraph cut to a few lines, with More when — and only when — it is cut.
@@ -39,6 +44,42 @@ export function Clamp({
   // A new text starts closed again.
   useLayoutEffect(() => setOpen(false), [text])
 
+  /*
+   * The paragraph's height is eased between the cut and the whole, and what
+   * sits below it moves down or up with it. Closing keeps the whole text
+   * showing until the box has shrunk to the cut, and only then puts the cut
+   * back, so the words are never clipped short while the box is still tall.
+   */
+  const toggle = (): void => {
+    const el = ref.current
+    if (!el || prefersReducedMotion()) {
+      setOpen(!open)
+      return
+    }
+    el.getAnimations().forEach((a) => a.cancel())
+    const from = el.getBoundingClientRect().height
+    if (!open) {
+      flushSync(() => setOpen(true))
+      const to = el.getBoundingClientRect().height
+      el.animate([{ height: `${from}px` }, { height: `${to}px` }], UNFOLD)
+      return
+    }
+    const to = parseFloat(getComputedStyle(el).lineHeight) * lines
+    if (!Number.isFinite(to) || to >= from) {
+      setOpen(false)
+      return
+    }
+    const closing = el.animate([{ height: `${from}px` }, { height: `${to}px` }], {
+      ...UNFOLD,
+      fill: 'forwards'
+    })
+    closing.onfinish = () => {
+      // Cut in the same frame the held height is let go, so nothing flickers.
+      flushSync(() => setOpen(false))
+      closing.cancel()
+    }
+  }
+
   return (
     <div className={className ? `clamp ${className}` : 'clamp'}>
       <p
@@ -55,7 +96,7 @@ export function Clamp({
           aria-expanded={open}
           onClick={(e) => {
             e.stopPropagation()
-            setOpen(!open)
+            toggle()
           }}
         >
           {open ? 'Less' : 'More'}

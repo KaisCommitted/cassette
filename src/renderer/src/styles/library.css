@@ -221,23 +221,28 @@
   border-radius: var(--r-md);
   box-shadow: 0 2px 6px oklch(0 0 0 / 0.3);
   transition:
-    transform var(--t-settle) var(--ease-out),
-    box-shadow var(--t-settle) ease;
+    transform var(--t-calm) var(--ease-out),
+    box-shadow var(--t-calm) var(--ease-out);
 }
-/* Motion answers the pointer or the keyboard, nothing else. */
+/*
+ * Motion answers the pointer or the keyboard, nothing else. A tape lifts off
+ * the shelf, slowly, and the picture on it drifts a little closer while you
+ * rest on it (below); the press is quick, the settling back is not.
+ */
 .tile:hover .tile-art {
-  transform: translateY(-3px);
-  box-shadow: 0 10px 22px oklch(0 0 0 / 0.45);
+  transform: translateY(-4px);
+  box-shadow: 0 14px 28px oklch(0 0 0 / 0.45);
 }
 .tile:focus-visible .tile-art {
-  transform: translateY(-3px);
+  transform: translateY(-4px);
   box-shadow:
     0 0 0 2px var(--ink),
     0 0 0 4px var(--brass),
-    0 10px 22px oklch(0 0 0 / 0.45);
+    0 14px 28px oklch(0 0 0 / 0.45);
 }
 .tile:active .tile-art {
   transform: translateY(-1px);
+  transition-duration: var(--t-quick);
 }
 
 .tile-caption {
@@ -342,10 +347,11 @@
   color: var(--ink);
   box-shadow: 0 4px 16px oklch(0 0 0 / 0.45);
   opacity: 0;
-  transform: scale(0.9);
+  transform: scale(0.82);
   transition:
-    opacity var(--t-quick) ease,
-    transform var(--t-settle) var(--ease-out);
+    opacity var(--t-settle) ease,
+    transform var(--t-calm) var(--ease-out),
+    background-color var(--t-quick) ease;
 }
 .play-disc .icon {
   width: 22px;
@@ -359,6 +365,12 @@
 .tile:focus-visible .play-disc {
   opacity: 1;
   transform: none;
+}
+/* Pressed in, like a button on the deck (episode rows: series.css). */
+.tile:active .play-disc,
+.resume-art:active .play-disc {
+  transform: scale(0.93);
+  transition-duration: var(--t-quick);
 }
 
 /* Watch progress along the bottom edge of the picture. */
@@ -506,7 +518,9 @@
   height: 100%;
   object-fit: cover;
   opacity: 0;
-  transition: opacity var(--t-settle) ease;
+  transition:
+    opacity var(--t-calm) ease,
+    transform 1400ms var(--ease-out);
 }
 .sleeve-art {
   z-index: 1;
@@ -515,6 +529,19 @@
 .sleeve-frame.is-loaded,
 .frame-art.is-loaded {
   opacity: 1;
+}
+.sleeve-art.is-instant,
+.sleeve-frame.is-instant,
+.frame-art.is-instant {
+  transition: transform 1400ms var(--ease-out);
+}
+/* Resting on a picture brings it a touch closer, slowly enough to feel like
+   leaning in rather than a zoom. Clipped by the sleeve or frame around it. */
+.tile:hover .sleeve-art,
+.tile:hover .frame-art,
+.resume-art:hover .frame-art,
+.episode-main:hover .frame-art {
+  transform: scale(1.045);
 }
 /* The case: a hairline just inside the poster's edge. */
 .sleeve::after {

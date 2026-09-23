@@ -8,6 +8,7 @@ import type {
   SubtitleScanScope,
   SubtitleSearchOptions
 } from '@shared/types'
+import { AnimatePresence, motion } from 'motion/react'
 import { Backdrop, FrameArt, ProgressSeam } from '../components/Art'
 import { ScanLog } from '../components/ScanLog'
 import { Clamp } from '../components/Clamp'
@@ -20,6 +21,7 @@ import {
   summariseSeries
 } from '../select'
 import { resumeTarget } from '../../../main/library/resume'
+import { EASE_IN, EASE_OUT, glide, glow } from '../../shared/motion'
 
 export interface SeriesViewProps {
   series: SeriesEntry
@@ -82,6 +84,19 @@ export function SeriesView({
       0
   )
   const current = series.seasons.find((s) => s.season === season) ?? series.seasons[0]
+
+  /**
+   * Which side the season just picked lies on, so its episodes come in from
+   * there. Null when the season changed by itself (opening, coming back from
+   * the player), which shows the list without moving it.
+   */
+  const [seasonFrom, setSeasonFrom] = useState<'left' | 'right' | null>(null)
+  const pickSeason = (next: number): void => {
+    if (next === season) return
+    const at = (n: number): number => series.seasons.findIndex((s) => s.season === n)
+    setSeasonFrom(at(next) > at(season) ? 'right' : 'left')
+    setSeason(next)
+  }
 
   const [search, setSearch] = useState<SubtitleSearch>(null)
   const searching = search !== null && search.results === null
@@ -165,6 +180,7 @@ export function SeriesView({
     if (!lastPlayedKey) return
     const home = series.seasons.find((s) => s.episodes.some((e) => e.file.key === lastPlayedKey))
     if (!home) return
+    setSeasonFrom(null)
     setSeason(home.season)
     focusAfterReturn.current = lastPlayedKey
   }, [returns, lastPlayedKey, series.seasons])
@@ -198,6 +214,7 @@ export function SeriesView({
     focusAfterReturn.current = null
     row.scrollIntoView({ block: 'center' })
     row.focus({ preventScroll: true })
+    glow(row, 300)
   })
 
   const tabs = useRef<(HTMLButtonElement | null)[]>([])
@@ -215,11 +232,21 @@ export function SeriesView({
               : null
     if (next === null) return
     e.preventDefault()
-    setSeason(series.seasons[next]!.season)
+    pickSeason(series.seasons[next]!.season)
     tabs.current[next]?.focus()
   }
 
-  const hasPanel = search !== null
+  /*
+   * The panel's column opens first and the panel fades into it; closing, the
+   * panel fades first and the column closes after, so the list is never
+   * squeezed under a panel still on its way out (see series.css).
+   */
+  const searchOpen = search !== null
+  const [panelRoom, setPanelRoom] = useState(false)
+  useEffect(() => {
+    if (searchOpen) setPanelRoom(true)
+  }, [searchOpen])
+  const hasPanel = panelRoom || searchOpen
 
   return (
     <div className="page page-series">
@@ -295,9 +322,16 @@ export function SeriesView({
                     aria-controls="season-panel"
                     tabIndex={s.season === season ? 0 : -1}
                     className="season-tab"
-                    onClick={() => setSeason(s.season)}
+                    onClick={() => pickSeason(s.season)}
                     onKeyDown={(e) => onTabKey(e, i)}
                   >
+                    {s.season === season && (
+                      <motion.span
+                        layoutId={`season-line-${series.id}`}
+                        className="season-tab-line"
+                        transition={glide}
+                      />
+                    )}
                     {seasonName(s.season)}
                     <span className="season-tab-count">
                       {watched === s.episodes.length ? (
@@ -333,7 +367,10 @@ export function SeriesView({
           )}
 
           <ol
+            // A new list per season, so the one picked comes in fresh.
+            key={season}
             className="episode-list"
+            data-from={seasonFrom ?? undefined}
             ref={listRef}
             id="season-panel"
             role={series.seasons.length > 1 ? 'tabpanel' : undefined}
@@ -371,42 +408,51 @@ export function SeriesView({
           </ol>
         </div>
 
-        {search && (
-          <aside className="subtitle-panel" aria-live="polite" aria-label="Subtitle search">
-            <div className="subtitle-panel-head">
-              <h2 className="subtitle-panel-title">Subtitles: {search.scope}</h2>
-              {!searching && (
-                <button
-                  className="icon-btn"
-                  aria-label="Close subtitle results"
-                  title="Close"
-                  onClick={() => setSearch(null)}
-                >
-                  <Icon name="close" />
-                </button>
-              )}
-            </div>
-            {searching ? (
-              <div className="subtitle-panel-busy">
-                <span className="meter" aria-hidden="true">
-                  <span className="is-indeterminate" />
-                </span>
-                <p>
-                  Looking on SubDL.
-                  {search.single
-                    ? ''
-                    : ' Episodes that already have subtitles are skipped; you can search any of them anyway from the results.'}
-                </p>
+        <AnimatePresence onExitComplete={() => setPanelRoom(false)}>
+          {search && (
+            <motion.aside
+              className="subtitle-panel"
+              aria-live="polite"
+              aria-label="Subtitle search"
+              initial={{ opacity: 0, x: 18 }}
+              animate={{ opacity: 1, x: 0, transition: { duration: 0.5, ease: EASE_OUT, delay: 0.16 } }}
+              exit={{ opacity: 0, x: 12, transition: { duration: 0.2, ease: EASE_IN } }}
+            >
+              <div className="subtitle-panel-head">
+                <h2 className="subtitle-panel-title">Subtitles: {search.scope}</h2>
+                {!searching && (
+                  <button
+                    className="icon-btn"
+                    aria-label="Close subtitle results"
+                    title="Close"
+                    onClick={() => setSearch(null)}
+                  >
+                    <Icon name="close" />
+                  </button>
+                )}
               </div>
-            ) : (
-              <ScanLog
-                results={search.results ?? []}
-                busy={retrying}
-                onSearchAgain={(key, options) => void searchAgain(key, options)}
-              />
-            )}
-          </aside>
-        )}
+              {searching ? (
+                <div className="subtitle-panel-busy">
+                  <span className="meter" aria-hidden="true">
+                    <span className="is-indeterminate" />
+                  </span>
+                  <p>
+                    Looking on SubDL.
+                    {search.single
+                      ? ''
+                      : ' Episodes that already have subtitles are skipped; you can search any of them anyway from the results.'}
+                  </p>
+                </div>
+              ) : (
+                <ScanLog
+                  results={search.results ?? []}
+                  busy={retrying}
+                  onSearchAgain={(key, options) => void searchAgain(key, options)}
+                />
+              )}
+            </motion.aside>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   )

@@ -21,12 +21,24 @@
   background:
     radial-gradient(
       110% 70% at 70% -10%,
-      rgba(var(--ambient, 40, 34, 26), 0.3) 0%,
-      rgba(var(--ambient, 40, 34, 26), 0.1) 45%,
+      color-mix(in srgb, var(--ambient) 30%, transparent) 0%,
+      color-mix(in srgb, var(--ambient) 10%, transparent) 45%,
       transparent 75%
     ),
     radial-gradient(60% 50% at 0% 100%, oklch(0.501 0.105 29 / 0.07), transparent 70%),
     var(--ink);
+  /* The wash changes colour with what is on screen slowly, the way a room
+     takes on the light of a different film. That repaints this one gradient
+     for about a second each time, and nothing in between. */
+  transition: --ambient var(--t-slow) var(--ease-in-out);
+}
+
+/* Registered, so the colour above is blended from one to the next rather
+   than switched. App.tsx sets it from the artwork. */
+@property --ambient {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: rgb(40 34 26);
 }
 
 .main {
@@ -51,6 +63,10 @@
  * Only the page moves; the top bar and the background stay put, so it reads
  * as the content changing inside a window that stays still. See transitionTo
  * in App.tsx.
+ *
+ * The old screen drifts a little and fades quickly; the new one follows a
+ * beat later and settles slowly, so there is a moment of calm between the
+ * two rather than a push. Forward drifts left, back drifts right.
  */
 .main {
   view-transition-name: page;
@@ -59,13 +75,13 @@
   view-transition-name: topbar;
 }
 ::view-transition-group(page) {
-  animation-duration: 260ms;
+  animation-duration: 640ms;
 }
 ::view-transition-old(page) {
-  animation: page-leave 160ms ease-in both;
+  animation: page-leave 220ms var(--ease-in) both;
 }
 ::view-transition-new(page) {
-  animation: page-enter 260ms var(--ease-out) both;
+  animation: page-enter 560ms var(--ease-out) 80ms both;
 }
 :root[data-nav='back']::view-transition-old(page) {
   animation-name: page-leave-back;
@@ -73,29 +89,108 @@
 :root[data-nav='back']::view-transition-new(page) {
   animation-name: page-enter-back;
 }
+/* The bar is not cross-faded as a picture: that ghosted the mark between its
+   two places when Back came or went. It changes live, and its own parts
+   move (Header.tsx). */
+::view-transition-old(topbar) {
+  display: none;
+}
+::view-transition-new(topbar) {
+  animation: none;
+}
 @keyframes page-leave {
   to {
     opacity: 0;
-    transform: translateX(-28px);
+    transform: translateX(-14px);
   }
 }
 @keyframes page-enter {
   from {
     opacity: 0;
-    transform: translateX(36px);
+    transform: translateX(26px);
   }
 }
 @keyframes page-leave-back {
   to {
     opacity: 0;
-    transform: translateX(28px);
+    transform: translateX(14px);
   }
 }
 @keyframes page-enter-back {
   from {
     opacity: 0;
-    transform: translateX(-36px);
+    transform: translateX(-26px);
   }
+}
+
+/* ============ opening the app ============ */
+
+/*
+ * The one entrance that is not an answer to something: when the library
+ * first appears, the bar settles and the page rises into place in a short
+ * cascade, top to bottom. Only on launch (App.tsx sets data-launch for its
+ * first moments), never when moving between screens.
+ */
+.shell[data-launch] .topbar {
+  animation: launch-fade 700ms var(--ease-out) both;
+}
+.shell[data-launch] .page > * {
+  animation: launch-rise 900ms var(--ease-out) both;
+}
+.shell[data-launch] .page > :nth-child(1) {
+  animation-delay: 90ms;
+}
+.shell[data-launch] .page > :nth-child(2) {
+  animation-delay: 190ms;
+}
+.shell[data-launch] .page > :nth-child(3) {
+  animation-delay: 280ms;
+}
+.shell[data-launch] .page > :nth-child(n + 4) {
+  animation-delay: 360ms;
+}
+@keyframes launch-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes launch-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+/* ============ lights down ============ */
+
+/*
+ * Pressing play dims the library to black before the player opens, and
+ * closing the player brings it back up out of black, the way a cinema's
+ * lights go down and come up again. The player fades its own picture to
+ * black before it closes (stopPlayback in main), so the whole trip is one
+ * dark crossing with no cut in it.
+ *
+ * Hidden outright while the lights are up, so at rest it costs nothing.
+ */
+.veil {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: #000;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 900ms var(--ease-in-out),
+    visibility 0s linear 900ms;
+}
+.veil.is-down {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition:
+    opacity 340ms var(--ease-in),
+    visibility 0s;
 }
 
 /* ============ top bar ============ */
@@ -115,25 +210,20 @@
   border-bottom: 1px solid var(--line);
 }
 
+/* Back arrives and leaves where it stands while the mark slides over to make
+   room, or back into it (Header.tsx); leaving, it is lifted out of the row,
+   which is what the positioning is for. */
 .topbar-start {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
   min-width: 0;
 }
 .topbar-back {
   width: 38px;
   height: 38px;
-  margin-left: -8px;
+  margin: 0 12px 0 -8px;
   color: var(--cream);
-  /* Arrives with the page it belongs to rather than blinking on. */
-  animation: back-in var(--t-settle) var(--ease-out) both;
-}
-@keyframes back-in {
-  from {
-    opacity: 0;
-    transform: translateX(6px);
-  }
 }
 
 .brand {
@@ -145,17 +235,12 @@
   border: 0;
   border-radius: var(--r-md);
   background: transparent;
+  margin-left: -6px;
   color: var(--cream);
   transition: background-color var(--t-quick) ease;
 }
 .brand:hover {
   background: oklch(0.906 0.02 80 / 0.06);
-}
-.topbar-back + .brand {
-  margin-left: 0;
-}
-.brand:not(.topbar-back + .brand) {
-  margin-left: -6px;
 }
 .brand-mark {
   height: 28px;
@@ -167,6 +252,7 @@
 }
 
 .topbar-end {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -309,14 +395,8 @@
   border-radius: var(--r-lg);
   background: oklch(0.245 0.007 70 / 0.98);
   box-shadow: 0 16px 40px oklch(0 0 0 / 0.55);
-  /* The one movement: it slides in when it appears, and then stays put. */
-  animation: update-in 280ms var(--ease-out) both;
-}
-@keyframes update-in {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
-  }
+  /* It rises in when it appears and sinks away when dismissed, and in
+     between stays put (UpdateBanner.tsx). */
 }
 
 .update-mark {
@@ -407,7 +487,12 @@
   justify-items: center;
   width: min(620px, 100%);
   text-align: center;
-  animation: page-in var(--t-settle) var(--ease-out) both;
+  animation: launch-rise 900ms var(--ease-out) both;
+}
+/* Choosing a folder and the scan it starts are one screen changing its mind,
+   so the scan eases in where the question was. */
+.setup-scan {
+  animation: page-in var(--t-calm) var(--ease-out) both;
 }
 .setup-mark {
   height: 64px;

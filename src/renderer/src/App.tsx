@@ -17,6 +17,7 @@ import { SeriesView } from './views/SeriesView'
 import { SettingsView } from './views/SettingsView'
 import { SetupView } from './views/SetupView'
 import { Logo } from '../shared/Icon'
+import { glow, prefersReducedMotion } from '../shared/motion'
 
 type View = { name: 'home' } | { name: 'series'; id: string } | { name: 'settings' }
 
@@ -41,17 +42,37 @@ function isTextEntry(element: Element | null): boolean {
  * change, and cross between the two; forward slides the new screen in from
  * the right, back from the left, so going into a series and coming out of it
  * read as opposites. It costs one short full-window animation per navigation
- * and nothing in between. Reduced motion gets the plain cut.
+ * and nothing in between. Reduced motion gets the plain cut, and so does a
+ * change made in the dark, while the lights are coming back up after the
+ * player: nobody sees it, and the veil would be captured into the picture.
  */
-function transitionTo(direction: 'forward' | 'back', update: () => void): void {
-  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  if (reduce || typeof document.startViewTransition !== 'function') {
+function transitionTo(direction: 'forward' | 'back', update: () => void, instant = false): void {
+  if (
+    instant ||
+    prefersReducedMotion() ||
+    document.visibilityState === 'hidden' ||
+    typeof document.startViewTransition !== 'function'
+  ) {
     update()
     return
   }
   document.documentElement.dataset.nav = direction
-  document.startViewTransition(() => flushSync(update))
+  const transition = document.startViewTransition(() => flushSync(update))
+  // One cut short (the window hidden mid-way, another navigation) has still
+  // made its change; only the animation is lost, which is nothing to report.
+  transition.ready.catch(() => undefined)
+  transition.finished.catch(() => undefined)
 }
+
+/**
+ * How long the library takes to go dark before the player opens. Long enough
+ * to be felt as the lights going down, short enough not to feel like waiting.
+ */
+const LIGHTS_DOWN_MS = 340
+/** If the player has not opened this long after asking, bring the lights back. */
+const LIGHTS_GIVE_UP_MS = 2500
+/** How long the launch cascade is given before the page is left to itself. */
+const LAUNCH_MS = 1400
 
 /** Where a view's scroll position and focus are remembered. */
 function viewKey(view: View, query: string): string {
@@ -81,6 +102,10 @@ export function App() {
   const [artwork, setArtwork] = useState<MetadataProgressInfo | null>(null)
 
   const [playing, setPlaying] = useState(false)
+  /** Play was pressed and the library is going dark; the player is not up yet. */
+  const [opening, setOpening] = useState(false)
+  /** The first moments of the library on screen, which get an entrance. */
+  const [launching, setLaunching] = useState(true)
   /** What was on screen last, so a returning view can put you back on it. */
   const [lastPlayedKey, setLastPlayedKey] = useState<string | null>(null)
   /** Bumped each time the player closes, for views that react to coming back. */
@@ -158,20 +183,50 @@ export function App() {
     focusBeforePlay.current = active instanceof HTMLElement ? active : null
   }, [])
 
-  const play = useCallback(
-    (path: string, key: string) => {
+  // The player is up: whatever was dimming the lights has done its job.
+  useEffect(() => {
+    if (playing) setOpening(false)
+  }, [playing])
+
+  /*
+   * Starting something takes the lights down first: the library fades to
+   * black, and the player opens in the dark (its loading screen fades up out
+   * of it). Closing reverses it — see the veil below and stopPlayback in main.
+   * A second press while the lights are going down is the same press.
+   */
+  const openingRef = useRef(false)
+  const startInTheDark = useCallback(
+    (start: () => Promise<unknown>) => {
+      if (openingRef.current) return
       rememberFocus()
-      void window.cassette.play(path, key)
+      openingRef.current = true
+      setOpening(true)
+      setTimeout(
+        () => {
+          openingRef.current = false
+          void start()
+            .catch(() => undefined)
+            .finally(() => {
+              // A file that fails to open must not leave the room dark.
+              setTimeout(() => {
+                if (!playingRef.current) setOpening(false)
+              }, LIGHTS_GIVE_UP_MS)
+            })
+        },
+        prefersReducedMotion() ? 0 : LIGHTS_DOWN_MS
+      )
     },
     [rememberFocus]
   )
 
+  const play = useCallback(
+    (path: string, key: string) => startInTheDark(() => window.cassette.play(path, key)),
+    [startInTheDark]
+  )
+
   const resumeSeries = useCallback(
-    (seriesId: string) => {
-      rememberFocus()
-      void window.cassette.resumeSeries(seriesId)
-    },
-    [rememberFocus]
+    (seriesId: string) => startInTheDark(() => window.cassette.resumeSeries(seriesId)),
+    [startInTheDark]
   )
 
   const handleChooseFolder = useCallback(async () => {
@@ -191,15 +246,25 @@ export function App() {
   const history = useRef<View[]>([])
 
   const navigate = useCallback(
-    (next: View, focus: string | null = null, direction?: 'forward' | 'back') => {
+    (
+      next: View,
+      focus: string | null = null,
+      direction?: 'forward' | 'back',
+      instant = false
+    ) => {
       const main = mainRef.current
       if (main) scrollMemory.current.set(currentKey, main.scrollTop)
       if (next.name === 'home') history.current = []
       else if (direction !== 'back') history.current.push(view)
-      transitionTo(direction ?? (next.name === 'home' ? 'back' : 'forward'), () => {
-        pendingFocus.current = focus
-        setView(next)
-      })
+      setLaunching(false)
+      transitionTo(
+        direction ?? (next.name === 'home' ? 'back' : 'forward'),
+        () => {
+          pendingFocus.current = focus
+          setView(next)
+        },
+        instant
+      )
     },
     [currentKey, view]
   )
@@ -242,6 +307,8 @@ export function App() {
     if (!focus) return
     const target = main.querySelector<HTMLElement>(`[data-return="${CSS.escape(focus)}"]`)
     target?.focus({ preventScroll: true })
+    // Back from the player onto an episode: say which one, as the lights come up.
+    if (target && focus.startsWith('episode:')) glow(target, 300)
   }, [currentKey])
 
   const openSeries = useCallback(
@@ -269,7 +336,8 @@ export function App() {
     )
     if (!home) return
     if (view.name === 'series' && view.id === home.id) return
-    navigate({ name: 'series', id: home.id }, `episode:${lastPlayedKey}`, 'back')
+    // Made in the dark, while the lights come back up, so it is not animated.
+    navigate({ name: 'series', id: home.id }, `episode:${lastPlayedKey}`, 'back', true)
     history.current.push(view)
   }, [returns, library, lastPlayedKey, view, navigate])
 
@@ -351,6 +419,14 @@ export function App() {
 
   const ambient = useAmbient(ambientSource)
 
+  // The entrance plays once, when the library first appears.
+  const hasLibrary = library !== null
+  useEffect(() => {
+    if (!hasLibrary) return
+    const timer = setTimeout(() => setLaunching(false), LAUNCH_MS)
+    return () => clearTimeout(timer)
+  }, [hasLibrary])
+
   // ---- screens ----
 
   if (lib.loading && !library) {
@@ -377,8 +453,9 @@ export function App() {
   return (
     <div
       className="shell"
-      style={{ ['--ambient' as string]: ambient.rgb }}
-      inert={playing}
+      style={{ ['--ambient' as string]: `rgb(${ambient.rgb})` }}
+      data-launch={launching || undefined}
+      inert={playing || opening}
     >
       <Header
         ref={searchRef}
@@ -390,7 +467,12 @@ export function App() {
           // The Library button is "take me to the top of my library": it
           // clears a search, and returning to it from elsewhere keeps its place.
           if (query) changeQuery('')
-          else if (view.name === 'home') mainRef.current?.scrollTo({ top: 0 })
+          else if (view.name === 'home') {
+            mainRef.current?.scrollTo({
+              top: 0,
+              behavior: prefersReducedMotion() ? 'auto' : 'smooth'
+            })
+          }
           else goHome(view.name === 'series' ? `series:${view.id}` : null)
         }}
         onSettings={() => {
@@ -481,6 +563,9 @@ export function App() {
 
       {/* Floats over the page from the corner; takes no place in its layout. */}
       <UpdateBanner />
+
+      {/* The lights: down while the player opens and while it is up. */}
+      <div className={opening || playing ? 'veil is-down' : 'veil'} aria-hidden="true" />
     </div>
   )
 }

@@ -1,6 +1,15 @@
 import { forwardRef, useEffect, useState } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
 import type { MetadataProgressInfo, ScanProgressInfo } from '@shared/types'
 import { Icon, Logo } from '../../shared/Icon'
+import { arrive, glide, leave } from '../../shared/motion'
+
+/** A chip in the bar: it fades in beside the cog, and away when done. */
+const chipMotion = {
+  initial: { opacity: 0, x: 8 },
+  animate: { opacity: 1, x: 0, transition: arrive },
+  exit: { opacity: 0, transition: leave }
+}
 
 export interface HeaderProps {
   current: 'library' | 'settings'
@@ -59,19 +68,29 @@ export const Header = forwardRef<HTMLInputElement, HeaderProps>(function Header(
   return (
     <header className="topbar">
       <div className="topbar-start">
-        {onBack && (
-          <button
-            className="icon-btn topbar-back"
-            onClick={onBack}
-            aria-label="Back"
-            title="Back (Esc)"
-          >
-            <Icon name="back-arrow" />
-          </button>
-        )}
+        {/* Back eases in as the mark slides over to make room, and leaves
+            where it stood as the mark slides back. */}
+        <AnimatePresence initial={false} mode="popLayout">
+          {onBack && (
+            <motion.button
+              key="back"
+              className="icon-btn topbar-back"
+              onClick={onBack}
+              aria-label="Back"
+              title="Back (Esc)"
+              initial={{ opacity: 0, x: 8 }}
+              animate={{ opacity: 1, x: 0, transition: { ...arrive, delay: 0.08 } }}
+              exit={{ opacity: 0, x: -6, transition: leave }}
+            >
+              <Icon name="back-arrow" />
+            </motion.button>
+          )}
+        </AnimatePresence>
         {/* \`rail-link\` and the hidden label are what the automated capture
             (src/main/testCapture.ts) looks for to move between screens. */}
-        <button
+        <motion.button
+          layout="position"
+          transition={glide}
           className="brand rail-link"
           onClick={onLibrary}
           aria-current={current === 'library' ? 'page' : undefined}
@@ -80,7 +99,7 @@ export const Header = forwardRef<HTMLInputElement, HeaderProps>(function Header(
           <span className="visually-hidden">Library</span>
           <Logo variant="mark" className="brand-mark" />
           <Logo variant="wordmark" className="brand-word" />
-        </button>
+        </motion.button>
       </div>
 
       <label className="searchbox">
@@ -108,36 +127,50 @@ export const Header = forwardRef<HTMLInputElement, HeaderProps>(function Header(
       </label>
 
       <div className="topbar-end">
-        {!scanning && artworkShown && artwork && (
-          <span className="scan-chip" role="status" title={artwork.current}>
-            <span className="scan-chip-bar" aria-hidden="true">
-              <span style={{ width: `${(artwork.done / artwork.total) * 100}%` }} />
-            </span>
-            <span className="scan-chip-text">
-              Artwork {artwork.done} of {artwork.total}
-            </span>
-          </span>
-        )}
+        <AnimatePresence initial={false} mode="popLayout">
+          {!scanning && artworkShown && artwork && (
+            <motion.span
+              key="artwork"
+              {...chipMotion}
+              className="scan-chip"
+              role="status"
+              title={artwork.current}
+            >
+              <span className="scan-chip-bar" aria-hidden="true">
+                <span style={{ width: `${(artwork.done / artwork.total) * 100}%` }} />
+              </span>
+              <span className="scan-chip-text">
+                Artwork {artwork.done} of {artwork.total}
+              </span>
+            </motion.span>
+          )}
 
-        {scanning && (
-          <button className="scan-chip" onClick={onSettings} title="Scan progress in Settings">
-            <span className="scan-chip-bar" aria-hidden="true">
-              <span
-                className={scanProgress ? undefined : 'is-indeterminate'}
-                style={
-                  scanProgress
-                    ? { width: `${(scanProgress.done / scanProgress.total) * 100}%` }
-                    : undefined
-                }
-              />
-            </span>
-            <span className="scan-chip-text">
-              {scanProgress
-                ? `Scanning ${scanProgress.done} of ${scanProgress.total}`
-                : 'Scanning'}
-            </span>
-          </button>
-        )}
+          {scanning && (
+            <motion.button
+              key="scan"
+              {...chipMotion}
+              className="scan-chip"
+              onClick={onSettings}
+              title="Scan progress in Settings"
+            >
+              <span className="scan-chip-bar" aria-hidden="true">
+                <span
+                  className={scanProgress ? undefined : 'is-indeterminate'}
+                  style={
+                    scanProgress
+                      ? { width: `${(scanProgress.done / scanProgress.total) * 100}%` }
+                      : undefined
+                  }
+                />
+              </span>
+              <span className="scan-chip-text">
+                {scanProgress
+                  ? `Scanning ${scanProgress.done} of ${scanProgress.total}`
+                  : 'Scanning'}
+              </span>
+            </motion.button>
+          )}
+        </AnimatePresence>
 
         <button
           className="icon-btn topbar-settings rail-link"
