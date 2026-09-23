@@ -193,6 +193,52 @@
     visibility 0s;
 }
 
+/*
+ * The tape in the machine: what the library shows while the player covers
+ * it, for the one viewer that still sees it — the Alt-Tab tile, which the
+ * veil alone left pitch black. Over the veil; still; never interactive. Sized
+ * to read at a tile's width, which is why the type is so large.
+ */
+.now-playing {
+  position: fixed;
+  inset: 0;
+  z-index: 51;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(28px, 4.5vw, 72px);
+  padding: 8vh 8vw;
+  pointer-events: none;
+}
+.now-playing-sleeve {
+  flex: 0 0 auto;
+  width: clamp(150px, 22vw, 320px);
+}
+.now-playing-text {
+  min-width: 0;
+  /* In viewport units, not ch: this box's own type is small, the title's is not. */
+  max-width: 46vw;
+}
+.now-playing-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(34px, 6.2vw, 92px);
+  line-height: 1;
+  letter-spacing: -0.025em;
+  color: var(--cream);
+  text-wrap: balance;
+  overflow-wrap: break-word;
+}
+.now-playing-detail {
+  margin: 0.55em 0 0;
+  font-family: var(--font-body);
+  font-weight: 450;
+  font-size: clamp(16px, 2.3vw, 32px);
+  line-height: 1.25;
+  color: var(--muted);
+}
+
 /* ============ top bar ============ */
 
 /*

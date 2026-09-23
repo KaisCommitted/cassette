@@ -11,6 +11,7 @@ import { useAmbient } from './useAmbient'
 import { artUrl } from './mediaUrls'
 import { continueWatching, keyForPath } from './select'
 import { Header } from './components/Header'
+import { NowPlayingCard } from './components/NowPlayingCard'
 import { UpdateBanner } from './components/UpdateBanner'
 import { HomeView, type Scope } from './views/HomeView'
 import { SeriesView } from './views/SeriesView'
@@ -566,6 +567,11 @@ export function App() {
 
       {/* The lights: down while the player opens and while it is up. */}
       <div className={opening || playing ? 'veil is-down' : 'veil'} aria-hidden="true" />
+
+      {/* Over the veil while the player is up: what the Alt-Tab tile shows. */}
+      {playing && lastPlayedKey && (
+        <NowPlayingCard library={library} metadata={metadata} mediaKey={lastPlayedKey} />
+      )}
     </div>
   )
 }

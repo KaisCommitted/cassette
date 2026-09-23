@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { Library, MediaFile, ProgressRecord } from '@shared/types'
+import type {
+  EpisodeMetadata,
+  Library,
+  MediaFile,
+  MediaMetadata,
+  MetadataSnapshot,
+  ProgressRecord
+} from '@shared/types'
 import {
   continueWatching,
   describeSeasons,
@@ -8,6 +15,7 @@ import {
   formatAgo,
   formatRemaining,
   keyForPath,
+  nowPlaying,
   seasonSpan,
   sleeveTone,
   summariseSeries
@@ -279,5 +287,49 @@ describe('episodeTitleFromFile', () => {
     expect(episodeTitleFromFile('Show.S01E03.1080p.WEB-DL.mkv')).toBeNull()
     expect(episodeTitleFromFile('Show S01E03.mkv')).toBeNull()
     expect(episodeTitleFromFile('random.mkv')).toBeNull()
+  })
+})
+
+describe('nowPlaying', () => {
+  const bare: MetadataSnapshot = { series: {}, movies: {}, episodes: {}, pinned: {} }
+  const known: MetadataSnapshot = {
+    series: { m: { title: 'The Mentalist', posterPath: '/mentalist.jpg' } as MediaMetadata },
+    movies: { r: { title: 'Another Round', posterPath: '/round.jpg', year: 2020 } as MediaMetadata },
+    episodes: { a: { title: 'Red Queen' } as EpisodeMetadata },
+    pinned: {}
+  }
+
+  it('names an episode by its series, with the episode and its title', () => {
+    expect(nowPlaying(library, known, 'a')).toEqual({
+      kind: 'episode',
+      title: 'The Mentalist',
+      detail: 'S3 E16 · Red Queen',
+      posterPath: '/mentalist.jpg',
+      thumbKey: 'a'
+    })
+  })
+
+  it('falls back to the library title and a bare episode label without metadata', () => {
+    expect(nowPlaying(library, bare, 'b')).toEqual({
+      kind: 'episode',
+      title: 'The Mentalist',
+      detail: 'S3 E17',
+      posterPath: null,
+      thumbKey: 'b'
+    })
+  })
+
+  it('names a film with its year', () => {
+    expect(nowPlaying(library, known, 'm1')).toEqual({
+      kind: 'film',
+      title: 'Another Round',
+      detail: '2020',
+      posterPath: '/round.jpg',
+      thumbKey: 'm1'
+    })
+  })
+
+  it('gives nothing for a file the library does not know', () => {
+    expect(nowPlaying(library, known, 'zzz')).toBeNull()
   })
 })

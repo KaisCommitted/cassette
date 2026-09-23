@@ -1,4 +1,10 @@
-import type { Library, MovieEntry, ProgressRecord, SeriesEntry } from '@shared/types'
+import type {
+  Library,
+  MetadataSnapshot,
+  MovieEntry,
+  ProgressRecord,
+  SeriesEntry
+} from '@shared/types'
 
 export interface ResumeItem {
   /** Series this belongs to, or null for a film. */
@@ -189,6 +195,58 @@ export function keyForPath(library: Library, path: string): string | null {
     }
   }
   return library.movies.find((m) => m.file.path === path)?.file.key ?? null
+}
+
+/** What the library says about the file playing: the tape in the machine. */
+export interface NowPlayingInfo {
+  kind: 'episode' | 'film'
+  /** The series or the film, by its TMDB title where there is one. */
+  title: string
+  /** "S3 E16 · Red Queen" for an episode; the year for a film; null if unknown. */
+  detail: string | null
+  posterPath: string | null
+  /** The file itself, for a frame when there is no poster. */
+  thumbKey: string
+}
+
+/**
+ * The card for a playing file, from what the library and TMDB already know.
+ *
+ * The same words the player's overlay uses for the same file, so the tile in
+ * the switcher and the title over the picture never disagree.
+ */
+export function nowPlaying(
+  library: Library,
+  metadata: MetadataSnapshot,
+  key: string
+): NowPlayingInfo | null {
+  for (const series of library.series) {
+    for (const season of series.seasons) {
+      const episode = season.episodes.find((e) => e.file.key === key)
+      if (!episode) continue
+      const meta = metadata.series[series.id]
+      const where = episodeLabel(episode.label, 'short')
+      const name = metadata.episodes[key]?.title || episodeTitleFromFile(episode.file.path)
+      return {
+        kind: 'episode',
+        title: meta?.title ?? series.title,
+        detail: name ? `${where} · ${name}` : where,
+        posterPath: meta?.posterPath ?? null,
+        thumbKey: key
+      }
+    }
+  }
+  const movie = library.movies.find((m) => m.file.key === key)
+  if (!movie) return null
+  const meta = metadata.movies[movie.id]
+  const year = meta?.year ?? movie.year
+  return {
+    kind: 'film',
+    title: meta?.title ?? movie.title,
+    detail: year ? String(year) : null,
+    posterPath: meta?.posterPath ?? null,
+    thumbKey: key
+  }
 }
 
 /**
