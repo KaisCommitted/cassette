@@ -153,6 +153,7 @@ p {
 
 .osd-times {
   display: flex;
+  text-shadow: 0 1px 6px oklch(0 0 0 / 0.7);
   justify-content: space-between;
   font-family: var(--font-display);
   font-size: var(--text-sm);
@@ -363,9 +364,10 @@ p {
 .osd-menu {
   position: absolute;
   right: clamp(20px, 2.4vw, 48px);
-  bottom: 84px;
+  /* Clear of the seek bar and its times, so neither is covered while open. */
+  bottom: 136px;
   width: 300px;
-  max-height: min(440px, calc(100vh - 180px));
+  max-height: min(440px, calc(100vh - 230px));
   overflow-y: auto;
   padding: 12px;
   border: 1px solid oklch(0.906 0.02 80 / 0.14);
