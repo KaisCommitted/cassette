@@ -4,26 +4,46 @@ import { preloadPath } from './preloadPath'
 import { followBounds } from './followBounds'
 
 /**
- * A transparent window that floats above the video window and draws the
- * on-screen controls.
+ * A transparent window above the video window that draws the on-screen
+ * controls.
  *
- * It starts click-through so the library underneath stays usable, and the
- * renderer switches that off while the pointer is over the controls — see
- * the `overlay:setInteractive` channel. Without that, clicks on the seek bar
- * fall through to whatever is behind the overlay.
+ * It is owned by the video window, and that is the whole of how it stays
+ * above the picture. Windows keeps an owned window above its owner, so the
+ * chain main → video → overlay holds its order by itself and moves as one
+ * with the main window: behind whatever app you switch to, back in front
+ * when you return, never over anything else.
  *
- * `focusable: false` keeps keyboard focus on the main window, which is where
- * key handling lives.
+ * It used to get there by being always-on-top, switched on while Cassette
+ * had focus and off when it lost it, so that the controls would not hang
+ * over other apps. That switching is what stopped the controls taking
+ * clicks. After a round of Alt-Tab, Chromium swallowed every button press on
+ * this window while still delivering the release — confirmed from inside the
+ * window, press by press, and cured on the spot by no longer switching.
+ *
+ * It can take focus, and that is what makes it clickable at all. A window
+ * that cannot take focus has every button press eaten by Chromium whenever
+ * Windows asks it whether a click should activate it — it answers "no, and
+ * discard the click", and only the release gets through. Windows asks that
+ * of any window that is not the active one, so after an Alt-Tab the controls
+ * stopped answering the mouse entirely, until something reset them. Found by
+ * logging the window's own events: releases arriving, presses never; and
+ * cured, live, by making it focusable and nothing else.
+ *
+ * Clicking it therefore moves focus to it, which is why the main process
+ * listens for key bindings on this window as well as on the main one.
  */
-export function createOverlayWindow(parent: BrowserWindow): BrowserWindow {
+export function createOverlayWindow(
+  main: BrowserWindow,
+  video: BrowserWindow
+): BrowserWindow {
   const overlay = new BrowserWindow({
-    parent,
+    parent: video,
     show: false,
     frame: false,
     transparent: true,
     resizable: false,
     movable: false,
-    focusable: false,
+    focusable: true,
     skipTaskbar: true,
     // See the video window: this is what keeps it out of Alt-Tab.
     type: 'toolbar',
@@ -35,9 +55,6 @@ export function createOverlayWindow(parent: BrowserWindow): BrowserWindow {
       backgroundThrottling: false
     }
   })
-
-  // Above the video window, which sits at the default level.
-  overlay.setAlwaysOnTop(true, 'pop-up-menu')
 
   /*
    * Click-through, and without asking for forwarded mouse messages.
@@ -74,6 +91,8 @@ export function createOverlayWindow(parent: BrowserWindow): BrowserWindow {
     void overlay.loadURL(rendererUrl('overlay.html'))
   }
 
-  followBounds(parent, overlay)
+  // Its position still comes from the main window's content area, like the
+  // video window's; only the stacking comes from the video.
+  followBounds(main, overlay)
   return overlay
 }

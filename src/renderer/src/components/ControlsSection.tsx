@@ -80,7 +80,8 @@ export function ControlsSection({ bindings, onAssign, onUnassign, onReset }: Con
       <p className="section-intro">
         These work while something is playing. Everywhere else your keys type and move
         around the library as usual. Pause and hide is the exception: it works from any
-        app, so you can get Cassette out of the way and back.
+        app, so you can get Cassette out of the way and back. Escape is not listed because
+        it always means back: out of fullscreen first, then out of the player.
       </p>
 
       {groups.map((group) => (
@@ -217,8 +218,8 @@ export function ControlsSection({ bindings, onAssign, onUnassign, onReset }: Con
  *
  * Keys come from anywhere while it is open, ahead of everything else on the
  * page. Holding a modifier shows it straight away, so it is clear a
- * combination is being built. Escape cancels; binding Escape itself is a
- * button, since the key cannot be both.
+ * combination is being built. Escape cancels, and is never bound: it always
+ * means back.
  */
 function CapturePad({
   actionLabel,
@@ -333,9 +334,6 @@ function CapturePad({
       </div>
 
       <div className="actions">
-        <button className="btn btn-quiet btn-sm" onClick={() => onCapture('key:Escape')}>
-          Use Escape
-        </button>
         <button className="btn btn-quiet btn-sm" onClick={onCancel}>
           Cancel
         </button>

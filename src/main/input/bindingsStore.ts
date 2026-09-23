@@ -13,6 +13,13 @@ import { readJson, writeJsonAtomic } from '../state/atomicJson'
 const UNBOUND = ''
 
 /**
+ * Keys the app keeps for itself. Escape always means back — out of
+ * fullscreen, then out of the player — so it is never bound to an action,
+ * and a binding for it in an older file is dropped.
+ */
+export const RESERVED_DESCRIPTORS = new Set(['key:Escape'])
+
+/**
  * The user's bindings, defaults merged underneath.
  *
  * Stored as descriptor to action so a single action can have several
@@ -50,7 +57,9 @@ export class BindingsStore {
 
   /** Binds a descriptor, taking it from whatever action previously held it. */
   async assign(descriptor: string, actionId: string): Promise<KeyBindings> {
-    this.bindings = { ...this.bindings, [canonicalDescriptor(descriptor)]: actionId }
+    const key = canonicalDescriptor(descriptor)
+    if (RESERVED_DESCRIPTORS.has(key)) return this.all()
+    this.bindings = { ...this.bindings, [key]: actionId }
     await this.save()
     return this.all()
   }
@@ -85,7 +94,9 @@ export class BindingsStore {
 function normalise(saved: KeyBindings): KeyBindings {
   const out: KeyBindings = {}
   for (const [descriptor, action] of Object.entries(saved)) {
-    out[canonicalDescriptor(descriptor)] = action
+    const key = canonicalDescriptor(descriptor)
+    if (RESERVED_DESCRIPTORS.has(key)) continue
+    out[key] = action
   }
   return out
 }

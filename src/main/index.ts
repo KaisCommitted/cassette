@@ -186,37 +186,13 @@ async function bootstrap(): Promise<void> {
   }
 
   const mainWindow = createMainWindow()
-  // Order matters: the video window must exist before the overlay so the
-  // overlay's always-on-top level puts the controls above the picture.
+  // The overlay is owned by the video window, which keeps it above the
+  // picture without ever being always-on-top; see createOverlayWindow.
   const videoWindow = createVideoWindow(mainWindow)
-  const overlayWindow = createOverlayWindow(mainWindow)
+  const overlayWindow = createOverlayWindow(mainWindow, videoWindow)
+
   const overlayInteraction = createOverlayInteraction(mainWindow, overlayWindow)
   const mpv = new MpvController()
-
-  /**
-   * The controls only float while Cassette is the app you are using.
-   *
-   * They sit above the picture by being always-on-top, and always-on-top is
-   * not relative to this app — it is above every window on the desktop. So
-   * switching to something else during an episode left a slab of controls
-   * hanging over whatever you switched to, with the video window below it.
-   *
-   * Tying it to focus keeps the controls above the video where they belong
-   * and lets the whole app go behind, the way any other window does. The
-   * video window needs no such handling: it is owned by the main window, so
-   * it already follows it in the z-order.
-   */
-  const floatOnlyWhenActive = (): void => {
-    if (overlayWindow.isDestroyed()) return
-    overlayWindow.setAlwaysOnTop(mainWindow.isFocused(), 'pop-up-menu')
-  }
-  mainWindow.on('focus', floatOnlyWhenActive)
-  mainWindow.on('blur', floatOnlyWhenActive)
-  // Also when the controls appear, not only when focus changes: starting an
-  // episode while the window is already in the background fires no focus
-  // event at all, and the controls would come up floating over everything.
-  overlayWindow.on('show', floatOnlyWhenActive)
-  floatOnlyWhenActive()
 
   // Handlers must be registered before the renderer mounts and starts calling
   // them. Starting mpv takes hundreds of milliseconds, so it must not come
@@ -392,9 +368,11 @@ async function bootstrap(): Promise<void> {
     typing = value === true
   })
 
-  // Keyboard: Chromium only sees these while the main window has focus,
-  // which is exactly the scope we want — nothing here is global.
-  mainWindow.webContents.on('before-input-event', (event, input) => {
+  // Keyboard: Chromium only sees these while one of Cassette's windows has
+  // focus, which is exactly the scope we want — nothing here is global. The
+  // player controls take focus when clicked (see createOverlayWindow), so they
+  // answer the same bindings as the main window.
+  const onKey = (event: Electron.Event, input: Electron.Input): void => {
     if (input.type !== 'keyDown') return
     // Bindings drive the player and nothing else. With nothing playing,
     // every key belongs to the page: to typing in search, to Tab and Enter,
@@ -402,6 +380,20 @@ async function bootstrap(): Promise<void> {
     // hold back only seek-style actions, so M, F and the arrows were taken
     // from the search box — typing "amen" left "aen" and muted the player.
     if (!mpv.getState().path || typing) return
+
+    // Escape is back, one step at a time: out of fullscreen if the player is
+    // fullscreen, otherwise out of the player to the episode you were on. It
+    // is not a binding, so it cannot be moved or lost.
+    if (input.key === 'Escape' && !input.control && !input.alt && !input.shift && !input.meta) {
+      event.preventDefault()
+      if (mainWindow.isFullScreen()) {
+        if (ctx) void toggleFullscreen(ctx).catch(() => undefined)
+      } else {
+        runActionSafely('stop')
+      }
+      return
+    }
+
     const action = ctx?.bindings.resolve(
       describeKey({
         key: input.key,
@@ -416,7 +408,9 @@ async function bootstrap(): Promise<void> {
     if (!action || action === 'hideAndPause') return
     event.preventDefault()
     runActionSafely(action)
-  })
+  }
+  mainWindow.webContents.on('before-input-event', onKey)
+  overlayWindow.webContents.on('before-input-event', onKey)
 
   // Mouse bindings arrive as descriptors from the overlay, which covers the
   // video while playing. They resolve through exactly the same table as keys.

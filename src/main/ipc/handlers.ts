@@ -63,8 +63,12 @@ export async function stopPlayback(ctx: AppContext): Promise<void> {
   await ctx.mpv.stop()
   ctx.currentKey = null
   ctx.overlayInteraction.stop()
+  // Focus may be on the controls, which are about to go; hand it back to the
+  // library rather than leave Windows to pick a window.
+  const controlsHadFocus = ctx.overlayWindow.isFocused()
   ctx.overlayWindow.hide()
   ctx.videoWindow.hide()
+  if (controlsHadFocus && !ctx.mainWindow.isDestroyed()) ctx.mainWindow.focus()
 
   // Fullscreen belongs to the player, not the library. Closing an episode
   // while fullscreen used to leave the window that way, which was wrong on its

@@ -373,6 +373,8 @@ export const ACTIONS: ActionDefinition[] = [
   { id: 'nextEpisode', label: 'Next episode', group: 'Navigation' },
   { id: 'previousEpisode', label: 'Previous episode', group: 'Navigation' },
   { id: 'stop', label: 'Close the player', group: 'Navigation' },
+  // Escape is not in this list on purpose: it always means "back" — out of
+  // fullscreen first, then out of the player — and is not rebindable.
   { id: 'cycleSubtitleTrack', label: 'Next subtitle track', group: 'Subtitles and audio' },
   { id: 'cycleAudioTrack', label: 'Next audio track', group: 'Subtitles and audio' },
   { id: 'subtitleDelayDown', label: 'Subtitles 50 ms earlier', group: 'Subtitles and audio' },
@@ -407,7 +409,6 @@ export const DEFAULT_BINDINGS: KeyBindings = {
   'key:h': 'subtitleDelayUp',
   'key:+': 'speedUp',
   'key:-': 'speedDown',
-  'key:Escape': 'stop',
   'mouse:double': 'toggleFullscreen'
 }
 

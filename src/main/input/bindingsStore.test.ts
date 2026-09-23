@@ -122,4 +122,15 @@ describe('BindingsStore', () => {
     await s.load()
     expect(s.descriptorsFor('seekShortBack').filter((d) => d.includes('Left') && !d.includes('Ctrl'))).toEqual(['key:Left'])
   })
+
+  it('never binds Escape, which always means back', async () => {
+    const { writeFile } = await import('node:fs/promises')
+    const file = join(dir, 'escape.json')
+    await writeFile(file, JSON.stringify({ 'key:Escape': 'stop' }))
+    const s = new BindingsStore(file)
+    await s.load()
+    expect(s.resolve('key:Escape')).toBeNull()
+    await s.assign('key:Escape', 'mute')
+    expect(s.resolve('key:Escape')).toBeNull()
+  })
 })
