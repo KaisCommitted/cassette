@@ -196,9 +196,18 @@ function toMovie(candidate: Candidate): MovieEntry {
     kind: 'movie',
     tags: []
   }
+  // The grouping identity strips the year, so that a series can be gathered
+  // from files that disagree about it. Two films that share a title are told
+  // apart by nothing else, so for a film the year goes back in; without it a
+  // remake took the original's tile and, for good, its artwork.
+  const identity = candidate.identity
+    ? candidate.signals.year
+      ? `${candidate.identity} ${candidate.signals.year}`
+      : candidate.identity
+    : candidate.key
   return {
     kind: 'movie',
-    id: candidate.identity || candidate.key,
+    id: identity,
     title,
     year: candidate.signals.year,
     file

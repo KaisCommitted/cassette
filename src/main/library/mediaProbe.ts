@@ -9,6 +9,17 @@ export interface ProbeResult {
   subtitles: EmbeddedSubtitle[]
 }
 
+/** A probe's answer, and whether mpv actually got to give one. */
+export interface ProbeOutcome extends ProbeResult {
+  /**
+   * False when the probe was cut short — it timed out, or mpv could not be
+   * started — so the answer is ours, not mpv's, and not worth remembering.
+   */
+  complete: boolean
+}
+
+export type ProbeRunner = (path: string) => Promise<ProbeOutcome>
+
 type ProbeCache = Record<string, ProbeResult>
 
 /**
@@ -24,12 +35,18 @@ export class MediaProbe {
   private inFlight = new Map<string, Promise<ProbeResult>>()
   private dirty = false
 
+  constructor(private readonly run: ProbeRunner = runMpvProbe) {}
+
   async load(): Promise<void> {
     this.cache = await readJson<ProbeCache>(probeCacheFile(), {})
   }
 
   async save(): Promise<void> {
     if (!this.dirty) return
+    // A library scan and a subtitle scan each keep their own copy of this;
+    // whichever saves second must not throw away what the other found.
+    const onDisk = await readJson<ProbeCache>(probeCacheFile(), {})
+    this.cache = { ...onDisk, ...this.cache }
     await writeJsonAtomic(probeCacheFile(), this.cache)
     this.dirty = false
   }
@@ -45,10 +62,16 @@ export class MediaProbe {
     const existing = this.inFlight.get(key)
     if (existing) return existing
 
-    const run = runMpvProbe(path)
-      .then((result) => {
-        this.cache[key] = result
-        this.dirty = true
+    const run = this.run(path)
+      .then(({ complete, ...result }) => {
+        // Only an answer mpv gave is kept. A probe that timed out, or never
+        // started, used to be remembered as "no duration, no subtitles" for
+        // good — hiding a file's embedded subtitles until the cache was
+        // deleted by hand.
+        if (complete) {
+          this.cache[key] = result
+          this.dirty = true
+        }
         return result
       })
       .finally(() => this.inFlight.delete(key))
@@ -67,17 +90,22 @@ export class MediaProbe {
  * ever clean them up.
  */
 const running = new Set<ReturnType<typeof spawn>>()
+/** Probes we ended ourselves, whose exit therefore says nothing about the file. */
+const killed = new WeakSet<ReturnType<typeof spawn>>()
 
 /** Stops any probe in flight. Called when the app is on its way out. */
 export function killRunningProbes(): number {
   const count = running.size
-  for (const child of running) child.kill()
+  for (const child of running) {
+    killed.add(child)
+    child.kill()
+  }
   running.clear()
   return count
 }
 
 /** Opens the file, decodes nothing, and reads what mpv prints about it. */
-function runMpvProbe(path: string): Promise<ProbeResult> {
+function runMpvProbe(path: string): Promise<ProbeOutcome> {
   return new Promise((resolve) => {
     const child = spawn(
       mpvBinaryPath(),
@@ -101,19 +129,25 @@ function runMpvProbe(path: string): Promise<ProbeResult> {
     child.stdout.on('data', (chunk: Buffer) => (text += chunk.toString()))
     child.stderr.on('data', (chunk: Buffer) => (text += chunk.toString()))
 
-    const timer = setTimeout(() => child.kill(), 20000)
+    const timer = setTimeout(() => {
+      killed.add(child)
+      child.kill()
+    }, 20000)
     timer.unref?.()
 
-    const finish = (): void => {
+    const finish = (complete: boolean): void => {
       clearTimeout(timer)
       running.delete(child)
       resolve({
         durationSeconds: parseDuration(text),
-        subtitles: parseTrackList(text)
+        subtitles: parseTrackList(text),
+        complete
       })
     }
-    child.on('exit', finish)
-    child.on('error', finish)
+    // mpv ending on its own is an answer, even a poor one; being killed by
+    // the timeout, or never starting, is not.
+    child.on('exit', () => finish(!killed.has(child)))
+    child.on('error', () => finish(false))
   })
 }
 

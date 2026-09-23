@@ -73,7 +73,11 @@ export function useAmbient(src: string | null): Ambient {
       }
     }
 
-    image.onerror = () => setAmbient(NEUTRAL)
+    // Guarded like onload: a superseded request failing must not reset the
+    // colour the current artwork has just set.
+    image.onerror = () => {
+      if (!cancelled) setAmbient(NEUTRAL)
+    }
     image.src = src
 
     return () => {

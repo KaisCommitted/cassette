@@ -17,6 +17,58 @@ export function describeKey(e: KeyDescriptor): string {
   return `key:${parts.join('+')}`
 }
 
+/**
+ * The native hook names punctuation and the numpad by position — `Comma`,
+ * `Numpad1` — where Electron and the page report the character. A binding is
+ * recorded in the settings screen in the second form, so a global binding on
+ * a punctuation key silently never fired until the hook's names came through
+ * here first.
+ */
+const HOOK_KEY_NAMES: Record<string, string> = {
+  Comma: ',',
+  Period: '.',
+  Slash: '/',
+  Semicolon: ';',
+  Quote: "'",
+  Backquote: '`',
+  Minus: '-',
+  Equal: '=',
+  BracketLeft: '[',
+  BracketRight: ']',
+  Backslash: '\\',
+  Numpad0: '0',
+  Numpad1: '1',
+  Numpad2: '2',
+  Numpad3: '3',
+  Numpad4: '4',
+  Numpad5: '5',
+  Numpad6: '6',
+  Numpad7: '7',
+  Numpad8: '8',
+  Numpad9: '9',
+  NumpadAdd: '+',
+  NumpadSubtract: '-',
+  NumpadMultiply: '*',
+  NumpadDivide: '/',
+  NumpadDecimal: '.',
+  NumpadEnter: 'Enter',
+  NumpadHome: 'Home',
+  NumpadEnd: 'End',
+  NumpadPageUp: 'PageUp',
+  NumpadPageDown: 'PageDown',
+  NumpadInsert: 'Insert',
+  NumpadDelete: 'Delete',
+  NumpadArrowLeft: 'Left',
+  NumpadArrowRight: 'Right',
+  NumpadArrowUp: 'Up',
+  NumpadArrowDown: 'Down'
+}
+
+/** A key as the native hook names it, spelled the way the page would. */
+export function hookKeyName(raw: string): string {
+  return canonicalKey(HOOK_KEY_NAMES[raw] ?? raw)
+}
+
 /** Mouse buttons use the same shape, so anything bindable to a key is bindable here. */
 export function describeMouseButton(button: number): string {
   switch (button) {

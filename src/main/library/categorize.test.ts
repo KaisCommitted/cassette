@@ -232,3 +232,20 @@ describe('categorize — multi-episode files and edge cases', () => {
     expect(library.series.map((s) => s.title)).toEqual(['Dark', 'Fringe'])
   })
 })
+
+describe('categorize — films that share a title', () => {
+  it('gives a remake its own identity', () => {
+    const library = categorize(
+      scan(`${W}\\The.Thing.1982.1080p.mkv`, `${W}\\The.Thing.2011.1080p.mkv`)
+    )
+    expect(library.movies.map((m) => m.title)).toEqual(['The Thing', 'The Thing'])
+    expect(new Set(library.movies.map((m) => m.id)).size).toBe(2)
+  })
+
+  it('keeps the same film in two folders under one identity', () => {
+    const library = categorize(
+      scan(`${W}\\Movies\\Heat (1995).mkv`, `${W}\\Backup\\Heat.1995.720p.mkv`)
+    )
+    expect(new Set(library.movies.map((m) => m.id)).size).toBe(1)
+  })
+})

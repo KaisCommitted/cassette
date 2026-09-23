@@ -1,5 +1,4 @@
 import type { Library, MediaFile, Settings, SubtitleSearchOptions } from '@shared/types'
-import { parseFilename } from '../library/parseFilename'
 import { MediaProbe } from '../library/mediaProbe'
 import { findLocalSubtitles, languageName, normaliseLanguage } from './localSubtitles'
 import { describeEmbedded, probeEmbeddedSubtitles } from './embeddedSubtitles'
@@ -222,14 +221,20 @@ export async function scanOne(
   }
 }
 
-/** Fetches one SubDL subtitle per still-missing language, best match first. */
+/**
+ * Fetches one SubDL subtitle per still-missing language, best match first.
+ *
+ * The search is for what the library knows the file to be — its title,
+ * season and episode as categorised with its neighbours — not for what the
+ * filename alone says. Re-parsing the name here sent an anime-style
+ * `Frieren - 05` off as a film called "Frieren - 05", and found nothing.
+ */
 async function downloadFromSubdl(file: MediaFile, missing: string[], key: string): Promise<string[]> {
-  const parsed = parseFilename(file.path)
   const written: string[] = []
   const client = new SubdlClient(key)
   // One search covers every language, so a file costs a single request no
   // matter how many languages are being filled in.
-  const candidates = rankSubdl(await client.search(parsed, missing), file.path)
+  const candidates = rankSubdl(await client.search(file, missing), file.path)
   for (const language of missing) {
     const best = candidates.find((c) => c.language === language)
     if (!best) continue
@@ -244,10 +249,9 @@ async function downloadFromOpenSubtitles(
   missing: string[],
   key: string
 ): Promise<string[]> {
-  const parsed = parseFilename(file.path)
   const written: string[] = []
   const client = new OpenSubtitlesClient({ apiKey: key })
-  const candidates = await client.search(parsed, file.path, missing)
+  const candidates = await client.search(file, file.path, missing)
   for (const language of missing) {
     const best = candidates.find((c) => normaliseLanguage(c.language) === language)
     if (!best) continue

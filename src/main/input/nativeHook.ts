@@ -1,4 +1,5 @@
 import { uIOhook, UiohookKey } from 'uiohook-napi'
+import { describeKey, hookKeyName } from './descriptors'
 
 /**
  * Watches the keyboard and mouse at OS level, for the single global binding.
@@ -17,17 +18,6 @@ const KEY_NAMES = new Map<number, string>(
   Object.entries(UiohookKey).map(([name, code]) => [code as number, name])
 )
 
-function keyName(keycode: number): string {
-  const raw = KEY_NAMES.get(keycode)
-  if (!raw) return `Key${keycode}`
-  // uiohook spells these differently from Electron's key names.
-  if (raw === 'ArrowLeft') return 'Left'
-  if (raw === 'ArrowRight') return 'Right'
-  if (raw === 'ArrowUp') return 'Up'
-  if (raw === 'ArrowDown') return 'Down'
-  return raw.length === 1 ? raw.toLowerCase() : raw
-}
-
 export function startNativeHook(deps: NativeHookDeps): () => void {
   const matches = (descriptor: string): boolean => deps.globalDescriptor() === descriptor
 
@@ -37,12 +27,16 @@ export function startNativeHook(deps: NativeHookDeps): () => void {
     altKey: boolean
     shiftKey: boolean
   }): void => {
-    const parts: string[] = []
-    if (e.ctrlKey) parts.push('Ctrl')
-    if (e.altKey) parts.push('Alt')
-    if (e.shiftKey) parts.push('Shift')
-    parts.push(keyName(e.keycode))
-    if (matches(`key:${parts.join('+')}`)) deps.onTrigger()
+    // Through the same spelling as every other source of a key, so what the
+    // settings screen recorded is what gets compared.
+    const raw = KEY_NAMES.get(e.keycode) ?? `Key${e.keycode}`
+    const descriptor = describeKey({
+      key: hookKeyName(raw),
+      control: e.ctrlKey,
+      alt: e.altKey,
+      shift: e.shiftKey
+    })
+    if (matches(descriptor)) deps.onTrigger()
   }
 
   const onMouseDown = (e: { button: unknown }): void => {

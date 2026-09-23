@@ -3,6 +3,7 @@ import {
   describeKey,
   describeMouseButton,
   describeWheel,
+  hookKeyName,
   humaniseDescriptor
 } from './descriptors'
 
@@ -39,6 +40,34 @@ describe('mouse descriptors', () => {
     expect(describeMouseButton(0).split(':')).toHaveLength(2)
     expect(describeKey({ key: 'a', control: false, alt: false, shift: false }).split(':'))
       .toHaveLength(2)
+  })
+})
+
+describe('hookKeyName', () => {
+  it('spells punctuation the way the page reports it', () => {
+    expect(hookKeyName('Comma')).toBe(',')
+    expect(hookKeyName('Period')).toBe('.')
+    expect(hookKeyName('Backquote')).toBe('`')
+    expect(hookKeyName('Minus')).toBe('-')
+    expect(hookKeyName('Equal')).toBe('=')
+    expect(hookKeyName('Slash')).toBe('/')
+  })
+
+  it('folds the numpad onto the main keys', () => {
+    expect(hookKeyName('Numpad1')).toBe('1')
+    expect(hookKeyName('NumpadEnter')).toBe('Enter')
+    expect(hookKeyName('NumpadAdd')).toBe('+')
+  })
+
+  it('uses the same arrow names as the page', () => {
+    expect(hookKeyName('ArrowLeft')).toBe('Left')
+    expect(hookKeyName('ArrowDown')).toBe('Down')
+  })
+
+  it('lowercases letters and passes other names through', () => {
+    expect(hookKeyName('A')).toBe('a')
+    expect(hookKeyName('F5')).toBe('F5')
+    expect(hookKeyName('Space')).toBe('Space')
   })
 })
 

@@ -1,5 +1,6 @@
 import { readdir, stat } from 'node:fs/promises'
 import { basename, dirname, extname, join } from 'node:path'
+import { MEDIA_EXTENSIONS } from '@shared/types'
 
 export const SUBTITLE_EXTENSIONS = ['.srt', '.ass', '.ssa', '.sub', '.vtt'] as const
 
@@ -90,6 +91,20 @@ function isSubtitle(name: string): boolean {
   return (SUBTITLE_EXTENSIONS as readonly string[]).includes(extname(name).toLowerCase())
 }
 
+function isVideo(name: string): boolean {
+  return (MEDIA_EXTENSIONS as readonly string[]).includes(extname(name).toLowerCase())
+}
+
+/**
+ * Whether a subtitle is named for the video: the video's name, alone or
+ * followed by more. `Show E1.eng` is; `Show E10.eng` is not.
+ */
+function namedFor(entryStem: string, stem: string): boolean {
+  if (!entryStem.startsWith(stem)) return false
+  const next = entryStem.charAt(stem.length)
+  return next === '' || /[.\-_\s[(]/.test(next)
+}
+
 /**
  * Subtitle files sitting next to a video.
  *
@@ -99,7 +114,19 @@ function isSubtitle(name: string): boolean {
  */
 export async function findLocalSubtitles(videoPath: string): Promise<FoundSubtitle[]> {
   const stem = basename(videoPath, extname(videoPath)).toLowerCase()
-  const folders = [dirname(videoPath), join(dirname(videoPath), 'Subs'), join(dirname(videoPath), 'subs')]
+  const home = dirname(videoPath)
+  const folders = [home, join(home, 'Subs'), join(home, 'subs')]
+
+  // A Subs folder beside a single video holds that video's subtitles, whatever
+  // they are called. Beside a season pack it holds every episode's, so there
+  // a file has to be named for its episode like any other, or episode three
+  // would be handed the whole season's.
+  let alone = false
+  try {
+    alone = (await readdir(home)).filter(isVideo).length <= 1
+  } catch {
+    // No folder, so no subtitles either; the loop below finds nothing.
+  }
 
   const found: FoundSubtitle[] = []
   const seen = new Set<string>()
@@ -114,9 +141,7 @@ export async function findLocalSubtitles(videoPath: string): Promise<FoundSubtit
     for (const entry of entries) {
       if (!isSubtitle(entry)) continue
       const entryStem = basename(entry, extname(entry)).toLowerCase()
-      // A subtitle in a dedicated Subs folder belongs to the only video there,
-      // so it does not have to repeat the full filename.
-      const belongs = entryStem.startsWith(stem) || folder.toLowerCase().endsWith('subs')
+      const belongs = namedFor(entryStem, stem) || (folder !== home && alone)
       if (!belongs) continue
 
       const path = join(folder, entry)

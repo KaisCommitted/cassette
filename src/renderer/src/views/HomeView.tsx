@@ -56,10 +56,19 @@ export function HomeView(props: HomeViewProps) {
     else props.onPlay(item.path, item.key)
   }
 
+  // Worth a control only once there is enough on the shelf to scroll past.
+  // With the control gone — the library shrank, or a whole kind went — a
+  // filter left on earlier must not keep hiding a shelf with no way back.
+  const scopeBar =
+    library.series.length > 0 &&
+    library.movies.length > 0 &&
+    library.series.length + library.movies.length > 12
+  const activeScope = scopeBar ? scope : 'all'
+
   // Search always looks across the whole shelf: a filter left on Films should
   // not make a series you typed the name of look missing.
-  const showSeries = searching || scope !== 'films'
-  const showFilms = searching || scope !== 'series'
+  const showSeries = searching || activeScope !== 'films'
+  const showFilms = searching || activeScope !== 'series'
   const nothingFound = searching && series.length === 0 && movies.length === 0
 
   return (
@@ -108,10 +117,7 @@ export function HomeView(props: HomeViewProps) {
             </section>
           )}
 
-          {/* Worth a control only once there is enough on the shelf to scroll past. */}
-          {library.series.length > 0 &&
-            library.movies.length > 0 &&
-            library.series.length + library.movies.length > 12 && (
+          {scopeBar && (
             <ScopeBar
               scope={scope}
               seriesCount={library.series.length}

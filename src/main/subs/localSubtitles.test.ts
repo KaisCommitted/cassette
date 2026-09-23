@@ -94,3 +94,32 @@ describe('findLocalSubtitles', () => {
     expect(await findLocalSubtitles(join(root, 'nope', 'x.mkv'))).toEqual([])
   })
 })
+
+describe('findLocalSubtitles in a season pack', () => {
+  let pack: string
+
+  beforeAll(async () => {
+    pack = join(root, 'pack')
+    await mkdir(join(pack, 'Subs'), { recursive: true })
+    await writeFile(join(pack, 'Show S01E01.mkv'), 'video')
+    await writeFile(join(pack, 'Show S01E02.mkv'), 'video')
+    await writeFile(join(pack, 'Subs', 'Show S01E01.eng.srt'), 'subs')
+    await writeFile(join(pack, 'Subs', 'Show S01E02.eng.srt'), 'subs')
+    await writeFile(join(pack, 'Subs', 'Random.srt'), 'subs')
+    await writeFile(join(pack, 'Show E1.mkv'), 'video')
+    await writeFile(join(pack, 'Show E1.eng.srt'), 'subs')
+    await writeFile(join(pack, 'Show E10.eng.srt'), 'subs')
+  })
+
+  it('takes from a shared Subs folder only the files named for this episode', async () => {
+    const found = await findLocalSubtitles(join(pack, 'Show S01E01.mkv'))
+    const names = found.map((f) => f.path.split(/[\\/]/).pop())
+    expect(names).toEqual(['Show S01E01.eng.srt'])
+  })
+
+  it('does not take episode 10 for episode 1', async () => {
+    const found = await findLocalSubtitles(join(pack, 'Show E1.mkv'))
+    const names = found.map((f) => f.path.split(/[\\/]/).pop())
+    expect(names).toEqual(['Show E1.eng.srt'])
+  })
+})

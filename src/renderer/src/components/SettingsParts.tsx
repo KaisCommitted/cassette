@@ -91,7 +91,11 @@ export function DraftInput({
           e.stopPropagation()
           setDraft(value)
           focused.current = false
-          requestAnimationFrame(() => e.currentTarget?.blur())
+          // Blur once the draft has been put back, so the blur commits
+          // nothing. React clears currentTarget as soon as this handler
+          // returns, so the box has to be taken now, not in the frame.
+          const box = e.currentTarget
+          requestAnimationFrame(() => box.blur())
         }
       }}
     />
