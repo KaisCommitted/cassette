@@ -76,10 +76,6 @@
   margin-top: 14px;
   color: oklch(0.906 0.02 80 / 0.78);
   line-height: 1.6;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 }
 .series-actions {
   margin-top: 22px;
@@ -165,6 +161,21 @@
   width: 15px;
   height: 15px;
   color: var(--brass);
+}
+
+/* The line above the list: how many episodes, and marking them all. */
+.season-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 40px;
+  margin-bottom: 4px;
+}
+.season-bar-count {
+  color: var(--faint);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---- episodes ---- */
@@ -277,8 +288,49 @@
 .is-last-label {
   color: var(--brass);
 }
-.episode-overview {
+.episode-overview-wrap {
+  position: relative;
+  display: block;
   margin-top: 3px;
+}
+/*
+ * The whole overview, floated over the rows below when the short one is cut.
+ * It waits a moment before opening, so moving down the list does not flash
+ * each row's text open on the way past.
+ */
+.episode-overview-full {
+  position: absolute;
+  z-index: 5;
+  top: -8px;
+  left: -11px;
+  right: -11px;
+  padding: 7px 10px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--raised);
+  box-shadow: 0 12px 28px oklch(0 0 0 / 0.45);
+  color: var(--cream);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  max-width: 80ch;
+  overflow-wrap: anywhere;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-2px);
+  transition:
+    opacity var(--t-quick) ease,
+    transform var(--t-settle) var(--ease-out),
+    visibility 0s linear var(--t-quick);
+  pointer-events: none;
+}
+.episode-main:hover .episode-overview-full,
+.episode-main:focus-visible .episode-overview-full {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition-delay: 450ms;
+}
+.episode-overview {
   max-width: 78ch;
   color: var(--muted);
   font-size: var(--text-sm);
@@ -375,6 +427,22 @@
   display: block;
   color: var(--faint);
   font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+.scan-row-action {
+  display: block;
+  margin: 4px 0 0 auto;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--brass);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+.scan-row-action:hover {
+  color: var(--brass-hi);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .scan-row.tone-ok .scan-row-mark,
 .scan-row.tone-ok .scan-row-status {

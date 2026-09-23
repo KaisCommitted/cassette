@@ -6,6 +6,7 @@ import type {
   SeriesEntry
 } from '@shared/types'
 import { FrameArt, PosterArt, ProgressSeam } from '../components/Art'
+import { Clamp } from '../components/Clamp'
 import { Icon } from '../../shared/Icon'
 import { formatTime } from '../../overlay/format'
 import {
@@ -263,7 +264,7 @@ function ResumeHero({
             {item.seriesId ? episodeLabel(item.detail, 'long') : item.detail}
           </p>
           {episode?.title && <h2 className="resume-episode">{episode.title}</h2>}
-          {overview && <p className="resume-overview">{overview}</p>}
+          {overview && <Clamp text={overview} lines={4} className="resume-overview" />}
 
           <div className="resume-foot">
             <div className="resume-progress">

@@ -1,5 +1,11 @@
 import { BrowserWindow, dialog, ipcMain } from 'electron'
-import { IPC, type Library, type MediaFile, type Settings } from '@shared/types'
+import {
+  IPC,
+  type Library,
+  type MediaFile,
+  type Settings,
+  type SubtitleSearchOptions
+} from '@shared/types'
 import { scanLibrary } from '../library/scanner'
 import { findNext, findPrevious, type PlayableItem } from '../library/playQueue'
 import { resumeTarget } from '../library/resume'
@@ -335,13 +341,19 @@ export function registerHandlers(ctx: AppContext): void {
 
   handle(IPC.useSubtitleFile, (path: string) => ctx.mpv.addSubtitleFile(path))
 
-  handle(IPC.scanSubtitles, async (scope: ScanScope) => {
+  handle(IPC.scanSubtitles, async (scope: ScanScope, options?: SubtitleSearchOptions) => {
     if (!ctx.library) return []
-    return scanForSubtitles(ctx.library, scope, withBundledKeys(ctx.settings.get()), (progress) => {
-      if (!ctx.mainWindow.isDestroyed()) {
-        ctx.mainWindow.webContents.send(IPC.subtitleScanProgress, progress)
-      }
-    })
+    return scanForSubtitles(
+      ctx.library,
+      scope,
+      withBundledKeys(ctx.settings.get()),
+      (progress) => {
+        if (!ctx.mainWindow.isDestroyed()) {
+          ctx.mainWindow.webContents.send(IPC.subtitleScanProgress, progress)
+        }
+      },
+      options ?? {}
+    )
   })
 
   /**
@@ -350,14 +362,22 @@ export function registerHandlers(ctx: AppContext): void {
    * Whatever is found is added as extra tracks straight away, so the menu it
    * was triggered from fills in rather than asking for a restart.
    */
-  handle(IPC.findSubtitlesNow, async () => {
+  handle(IPC.findSubtitlesNow, async (options?: SubtitleSearchOptions) => {
     const path = ctx.mpv.getState().path
     if (!path || !ctx.library) return null
 
     const target = findFile(ctx.library, path)
     if (!target) return null
 
-    const result = await scanOne(target.file, target.label, withBundledKeys(ctx.settings.get()))
+    // Asked for from the player, so "it already has some" is no answer:
+    // whoever pressed it is looking at those and wants something else.
+    const result = await scanOne(
+      target.file,
+      target.label,
+      withBundledKeys(ctx.settings.get()),
+      null,
+      { force: true, ...options }
+    )
     await loadExternalSubtitles(ctx, path)
     return result
   })

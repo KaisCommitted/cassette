@@ -240,9 +240,12 @@ export interface CassetteApi {
   refreshMetadata: (force?: boolean) => Promise<MetadataSnapshot>
   markWatched: (key: string, watched: boolean) => Promise<void>
   resumeSeries: (seriesId: string) => Promise<void>
-  scanSubtitles: (scope: SubtitleScanScope) => Promise<SubtitleScanResult[]>
+  scanSubtitles: (
+    scope: SubtitleScanScope,
+    options?: SubtitleSearchOptions
+  ) => Promise<SubtitleScanResult[]>
   /** Searches online for the file playing right now and loads what it finds. */
-  findSubtitlesNow: () => Promise<SubtitleScanResult | null>
+  findSubtitlesNow: (options?: SubtitleSearchOptions) => Promise<SubtitleScanResult | null>
   listLocalSubtitles: () => Promise<LocalSubtitle[]>
   useSubtitleFile: (path: string) => Promise<void>
   setSleepTimer: (seconds: number | null) => Promise<void>
@@ -420,6 +423,19 @@ export interface SubtitleScanResult {
   label: string
   status: 'has-embedded' | 'already-had-one' | 'downloaded' | 'nothing-found' | 'failed'
   detail?: string
+  /**
+   * SubDL had nothing and an OpenSubtitles key is available, so it is worth
+   * offering to try there. Never done automatically: its free quota is a
+   * handful of downloads a day.
+   */
+  canTryOpenSubtitles?: boolean
+}
+
+export interface SubtitleSearchOptions {
+  /** Search even when the file already carries subtitles in the language. */
+  force?: boolean
+  /** Where to look. SubDL unless OpenSubtitles is asked for by name. */
+  provider?: 'subdl' | 'opensubtitles'
 }
 
 /** How far an artwork lookup has got; `done === total` means finished. */

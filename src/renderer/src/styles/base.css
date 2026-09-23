@@ -346,6 +346,30 @@ kbd {
   font-family: var(--font-display);
 }
 
+/* A paragraph cut to a few lines, with More beside it when it is cut. */
+.clamp-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.clamp-text[data-open] {
+  display: block;
+}
+.clamp-toggle {
+  margin-top: 4px;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--brass);
+  font-size: var(--text-sm);
+  font-weight: 560;
+}
+.clamp-toggle:hover {
+  color: var(--brass-hi);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 /* ============ empty and loading ============ */
 
 .empty-state {

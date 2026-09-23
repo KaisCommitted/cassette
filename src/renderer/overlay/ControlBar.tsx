@@ -273,25 +273,35 @@ function VolumeControl({ state }: { state: PlaybackState }) {
  */
 function SubtitleSearch() {
   const [status, setStatus] = useState<'idle' | 'searching' | string>('idle')
+  /** SubDL came back empty and OpenSubtitles is there to try, by hand. */
+  const [offerOpenSubtitles, setOfferOpenSubtitles] = useState(false)
 
-  const run = (): void => {
+  const run = (provider: 'subdl' | 'opensubtitles'): void => {
     if (status === 'searching') return
     setStatus('searching')
+    setOfferOpenSubtitles(false)
     void api
-      .findSubtitlesNow()
+      .findSubtitlesNow({ force: true, provider })
       .then((result) => {
         if (!result) return setStatus('Nothing to search for')
         if (result.status === 'downloaded') return setStatus('Added — pick it above')
         if (result.status === 'failed') return setStatus(result.detail ?? 'Search failed')
-        if (result.status === 'nothing-found') return setStatus('Nothing found')
-        return setStatus('Already had subtitles')
+        if (result.status === 'nothing-found') {
+          setOfferOpenSubtitles(result.canTryOpenSubtitles === true)
+          return setStatus(provider === 'subdl' ? 'Nothing on SubDL' : 'Nothing on OpenSubtitles either')
+        }
+        return setStatus('Already downloaded one')
       })
       .catch(() => setStatus('Search failed'))
   }
 
   return (
     <div className="osd-menu-section">
-      <button className="osd-menu-action" onClick={run} disabled={status === 'searching'}>
+      <button
+        className="osd-menu-action"
+        onClick={() => run('subdl')}
+        disabled={status === 'searching'}
+      >
         <Icon name="search" />
         {status === 'searching' ? 'Searching…' : 'Find subtitles online'}
       </button>
@@ -299,6 +309,11 @@ function SubtitleSearch() {
         <p className="osd-menu-status" role="status">
           {status}
         </p>
+      )}
+      {offerOpenSubtitles && status !== 'searching' && (
+        <button className="osd-menu-action osd-menu-action-quiet" onClick={() => run('opensubtitles')}>
+          Try OpenSubtitles
+        </button>
       )}
     </div>
   )

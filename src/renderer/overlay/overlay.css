@@ -484,6 +484,11 @@ p {
 .osd-menu-action:disabled {
   opacity: 0.6;
 }
+.osd-menu-action-quiet {
+  margin-top: 8px;
+  border-style: dashed;
+  color: var(--brass);
+}
 .osd-menu-status {
   margin-top: 8px;
   color: oklch(0.906 0.02 80 / 0.66);

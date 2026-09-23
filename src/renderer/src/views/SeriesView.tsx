@@ -5,10 +5,12 @@ import type {
   ProgressRecord,
   SeriesEntry,
   SubtitleScanResult,
-  SubtitleScanScope
+  SubtitleScanScope,
+  SubtitleSearchOptions
 } from '@shared/types'
 import { Backdrop, FrameArt, ProgressSeam } from '../components/Art'
 import { ScanLog } from '../components/ScanLog'
+import { Clamp } from '../components/Clamp'
 import { Icon } from '../../shared/Icon'
 import { describeSeasons, episodeLabel, formatRemaining, summariseSeries } from '../select'
 
@@ -27,7 +29,12 @@ export interface SeriesViewProps {
 }
 
 /** What the subtitle panel is showing: a search under way, or its results. */
-type SubtitleSearch = { scope: string; results: SubtitleScanResult[] | null } | null
+type SubtitleSearch = {
+  scope: string
+  /** One episode, searched even if it already has subtitles. */
+  single: boolean
+  results: SubtitleScanResult[] | null
+} | null
 
 function seasonName(season: number): string {
   return season === 0 ? 'Unsorted' : `Season ${season}`
@@ -64,15 +71,43 @@ export function SeriesView({
   // Results belong to the series they were asked for.
   useEffect(() => setSearch(null), [series.id])
 
-  const scan = async (scope: SubtitleScanScope, label: string): Promise<void> => {
-    setSearch({ scope: label, results: null })
+  const scan = async (
+    scope: SubtitleScanScope,
+    label: string,
+    options?: SubtitleSearchOptions
+  ): Promise<void> => {
+    const single = scope.kind === 'episode'
+    setSearch({ scope: label, single, results: null })
     try {
-      const results = await window.cassette.scanSubtitles(scope)
-      setSearch({ scope: label, results })
+      const results = await window.cassette.scanSubtitles(scope, options)
+      setSearch({ scope: label, single, results })
     } catch {
       setSearch({
         scope: label,
+        single,
         results: [{ key: 'error', label, status: 'failed', detail: 'The search did not finish.' }]
+      })
+    }
+  }
+
+  /** Follow-up searches from the results panel, one file at a time. */
+  const [retrying, setRetrying] = useState<Set<string>>(new Set())
+  const searchAgain = async (key: string, options: SubtitleSearchOptions): Promise<void> => {
+    setRetrying((s) => new Set(s).add(key))
+    try {
+      const [result] = await window.cassette.scanSubtitles({ kind: 'episode', key }, options)
+      if (result) {
+        setSearch((current) =>
+          current?.results
+            ? { ...current, results: current.results.map((r) => (r.key === key ? result : r)) }
+            : current
+        )
+      }
+    } finally {
+      setRetrying((s) => {
+        const next = new Set(s)
+        next.delete(key)
+        return next
       })
     }
   }
@@ -80,6 +115,23 @@ export function SeriesView({
   const toggleWatched = async (key: string, watched: boolean): Promise<void> => {
     await window.cassette.markWatched(key, watched)
     onRefreshProgress()
+  }
+
+  // A season at a time: everything in it marked the same way.
+  const [markingSeason, setMarkingSeason] = useState(false)
+  const seasonWatched =
+    current !== undefined && current.episodes.every((e) => progress.get(e.file.key)?.finished)
+  const markSeason = async (watched: boolean): Promise<void> => {
+    if (!current) return
+    setMarkingSeason(true)
+    try {
+      for (const episode of current.episodes) {
+        await window.cassette.markWatched(episode.file.key, watched)
+      }
+    } finally {
+      setMarkingSeason(false)
+      onRefreshProgress()
+    }
   }
 
   /*
@@ -155,7 +207,9 @@ export function SeriesView({
           <h1 className="series-title" tabIndex={-1} data-return="page-start">
             {title}
           </h1>
-          {meta?.overview && <p className="series-overview">{meta.overview}</p>}
+          {meta?.overview && (
+            <Clamp text={meta.overview} lines={3} className="series-overview" />
+          )}
 
           <div className="actions series-actions">
             <button className="btn btn-primary" onClick={() => onResumeSeries(series.id)}>
@@ -227,6 +281,26 @@ export function SeriesView({
             </div>
           )}
 
+          {current && (
+            <div className="season-bar">
+              <span className="season-bar-count">
+                {current.episodes.length === 1 ? '1 episode' : `${current.episodes.length} episodes`}
+              </span>
+              <button
+                className="btn btn-quiet btn-sm"
+                disabled={markingSeason}
+                onClick={() => void markSeason(!seasonWatched)}
+              >
+                <Icon name="tick" />
+                {markingSeason
+                  ? 'Marking…'
+                  : seasonWatched
+                    ? `Mark ${seasonName(current.season).toLowerCase()} as unwatched`
+                    : `Mark ${seasonName(current.season).toLowerCase()} as watched`}
+              </button>
+            </div>
+          )}
+
           <ol
             className="episode-list"
             ref={listRef}
@@ -245,10 +319,13 @@ export function SeriesView({
                 searching={searching}
                 onPlay={() => onPlay(episode.file.path, episode.file.key)}
                 onToggleWatched={(watched) => void toggleWatched(episode.file.key, watched)}
+                // One episode asked for by name is searched even when it
+                // already carries subtitles: that is usually why you asked.
                 onFindSubtitles={() =>
                   void scan(
                     { kind: 'episode', key: episode.file.key },
-                    episodeLabel(episode.label, 'short')
+                    episodeLabel(episode.label, 'short'),
+                    { force: true }
                   )
                 }
               />
@@ -276,10 +353,19 @@ export function SeriesView({
                 <span className="meter" aria-hidden="true">
                   <span className="is-indeterminate" />
                 </span>
-                <p>Looking for subtitles. Files that already have them are skipped.</p>
+                <p>
+                  Looking on SubDL.
+                  {search.single
+                    ? ''
+                    : ' Episodes that already have subtitles are skipped; you can search any of them anyway from the results.'}
+                </p>
               </div>
             ) : (
-              <ScanLog results={search.results ?? []} />
+              <ScanLog
+                results={search.results ?? []}
+                busy={retrying}
+                onSearchAgain={(key, options) => void searchAgain(key, options)}
+              />
             )}
           </aside>
         )}
@@ -291,6 +377,41 @@ export function SeriesView({
 function anyStarted(series: SeriesEntry, progress: Map<string, ProgressRecord>): boolean {
   return series.seasons.some((s) =>
     s.episodes.some((e) => (progress.get(e.file.key)?.positionSeconds ?? 0) > 30)
+  )
+}
+
+/**
+ * An episode's overview, cut to two lines in the list.
+ *
+ * When it is cut, resting the pointer on the row (or reaching it with the
+ * keyboard) opens the whole text over the rows below, after a short pause so
+ * sweeping down the list does not flash every one open. It floats rather than
+ * growing the row, so nothing under the pointer moves.
+ */
+function EpisodeOverview({ text }: { text: string }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const [cut, setCut] = useState(false)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const measure = (): void => setCut(el.scrollHeight > el.clientHeight + 1)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [text])
+
+  return (
+    <span className="episode-overview-wrap">
+      <span className="episode-overview" ref={ref}>
+        {text}
+      </span>
+      {cut && (
+        <span className="episode-overview-full" aria-hidden="true">
+          {text}
+        </span>
+      )}
+    </span>
   )
 }
 
@@ -362,7 +483,7 @@ function EpisodeRow({
             {status && <span className={finished ? 'is-watched' : undefined}>{status}</span>}
             {last && <span className="is-last-label">Last played</span>}
           </span>
-          <span className="episode-overview">{meta?.overview || fileName}</span>
+          <EpisodeOverview text={meta?.overview || fileName} />
         </span>
       </button>
 

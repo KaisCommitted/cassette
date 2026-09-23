@@ -95,10 +95,6 @@
   max-width: 62ch;
   color: var(--muted);
   line-height: 1.6;
-  display: -webkit-box;
-  -webkit-line-clamp: 4;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 }
 .resume-foot {
   display: grid;
@@ -122,11 +118,6 @@
   white-space: nowrap;
 }
 
-@media (max-width: 1180px) {
-  .resume-overview {
-    -webkit-line-clamp: 2;
-  }
-}
 
 /* ============ shelves ============ */
 
