@@ -11,10 +11,10 @@ import { Icon } from '../../shared/Icon'
 import { formatTime } from '../../overlay/format'
 import {
   continueWatching,
-  describeSeasons,
   episodeLabel,
   filterLibrary,
   formatRemaining,
+  seasonSpan,
   summariseSeries,
   type ResumeItem
 } from '../select'
@@ -222,7 +222,7 @@ function ResumeHero({
   const title = meta?.title ?? item.title
   const overview = episode?.overview || meta?.overview
   const still = episode?.stillPath
-    ? { path: episode.stillPath, kind: 'still' as const }
+    ? { path: episode.stillPath, kind: 'still-large' as const }
     : meta?.backdropPath
       ? { path: meta.backdropPath, kind: 'backdrop' as const }
       : null
@@ -305,7 +305,7 @@ function ResumeTile({
   const meta = item.seriesId ? metadata.series[item.seriesId] : undefined
   const title = meta?.title ?? item.title
   const still = episode?.stillPath
-    ? { path: episode.stillPath, kind: 'still' as const }
+    ? { path: episode.stillPath, kind: 'still-large' as const }
     : meta?.backdropPath
       ? { path: meta.backdropPath, kind: 'backdrop' as const }
       : null
@@ -364,9 +364,10 @@ function SeriesTile({
         </PosterArt>
       </span>
       <Caption title={title} rating={meta?.rating ?? null} />
-      <span className="tile-sub">
-        {summary.episodeCount === 1 ? '1 episode' : `${summary.episodeCount} episodes`},{' '}
-        {describeSeasons(summary.seasonNumbers)}
+      <span className="tile-sub tile-facts">
+        <span>{seasonSpan(summary.seasonNumbers)}</span>
+        <span className="tile-facts-dot" aria-hidden="true" />
+        <span>{summary.episodeCount === 1 ? '1 episode' : `${summary.episodeCount} episodes`}</span>
       </span>
       {complete && <span className="visually-hidden">Watched</span>}
     </button>

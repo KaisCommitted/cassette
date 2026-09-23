@@ -6,7 +6,12 @@ import { mpvBinaryPath } from '../mpv/mpvProcess'
 
 /** Where in the file to grab the still, as a fraction of its duration. */
 const GRAB_AT = '18%'
-const WIDTH = 480
+/**
+ * Wide enough for the home page's big "Still watching" card, which is the
+ * largest place a frame is shown. Frames used to be 480 wide, which was fine
+ * on a tile and visibly blocky there.
+ */
+const WIDTH = 1280
 
 /**
  * Generates poster stills by pulling a frame out of each file with mpv.
@@ -24,7 +29,13 @@ export class ThumbnailService {
   private queue: Array<() => void> = []
   private readonly maxConcurrent = 2
 
+  /** The width is in the name, so frames grabbed at an older size are redone. */
   thumbPath(key: string): string {
+    return join(thumbsDir(), `${key}.w${WIDTH}.jpg`)
+  }
+
+  /** Where frames were kept before the width was part of the name. */
+  private legacyPath(key: string): string {
     return join(thumbsDir(), `${key}.jpg`)
   }
 
@@ -80,6 +91,7 @@ export class ThumbnailService {
       const produced = (await readdir(scratch)).find((f) => f.endsWith('.jpg'))
       if (!produced) return null
       await rename(join(scratch, produced), target)
+      await rm(this.legacyPath(key), { force: true }).catch(() => undefined)
       return target
     } catch {
       return null

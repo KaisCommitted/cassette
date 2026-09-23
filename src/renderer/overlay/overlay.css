@@ -465,6 +465,10 @@ p {
   font-weight: 600;
 }
 
+.osd-menu-after-grid {
+  margin-top: 8px;
+}
+
 .osd-menu-section {
   margin-top: 10px;
   padding-top: 10px;
@@ -564,6 +568,117 @@ p {
 .osd-dip.is-on {
   opacity: 1;
   transition-duration: 100ms;
+}
+
+/* ---- sleep timer night light ---- */
+
+/*
+ * Updated once a second as the dimming ramps; the transition blends the
+ * steps into one slow fade, and eases it away again when the timer ends.
+ */
+.osd-night {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  pointer-events: none;
+  transition: opacity 1.2s linear;
+}
+
+.osd-switch-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 6px 6px 6px 10px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  text-align: left;
+  transition: background-color var(--t-quick) ease;
+}
+.osd-switch-row:hover {
+  background: oklch(0.906 0.02 80 / 0.08);
+}
+.osd-switch-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+.osd-switch-label {
+  font-size: var(--text-sm);
+}
+.osd-switch-help {
+  color: oklch(0.906 0.02 80 / 0.6);
+  font-size: var(--text-xs);
+}
+.osd-switch {
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 20px;
+  border-radius: 99px;
+  background: oklch(0.906 0.02 80 / 0.2);
+  transition: background-color var(--t-settle) ease;
+}
+.osd-switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--cream);
+  transition: transform var(--t-settle) var(--ease-out);
+}
+.osd-switch-row[aria-checked='true'] .osd-switch {
+  background: var(--brass);
+}
+.osd-switch-row[aria-checked='true'] .osd-switch::after {
+  background: var(--ink);
+  transform: translateX(14px);
+}
+
+/* ---- subtitle delay, shown as it changes ---- */
+
+.osd-toast {
+  position: absolute;
+  left: 50%;
+  top: 96px;
+  z-index: 3;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 16px 10px;
+  border: 1px solid oklch(0.906 0.02 80 / 0.14);
+  border-radius: var(--r-md);
+  background: oklch(0.17 0.004 85 / 0.82);
+  box-shadow: 0 6px 24px oklch(0 0 0 / 0.4);
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -6px);
+  transition:
+    opacity var(--t-settle) ease,
+    transform var(--t-settle) var(--ease-out);
+}
+.osd-toast.is-on {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  transition-duration: var(--t-quick);
+}
+.osd-toast-label {
+  color: oklch(0.906 0.02 80 / 0.7);
+  font-size: var(--text-sm);
+}
+.osd-toast-value {
+  min-width: 4.5ch;
+  color: var(--brass);
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  text-align: right;
 }
 
 /* ---- opening a file ---- */

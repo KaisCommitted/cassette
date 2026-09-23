@@ -130,7 +130,11 @@ function toMatch(hit: SearchResult): TmdbMatch {
 export const IMAGE_SIZES = {
   poster: 'w500',
   backdrop: 'w1280',
-  still: 'w300'
+  still: 'w300',
+  // TMDB cuts stills at w92, w185, w300 and original, nothing between. w300
+  // suits a row in an episode list but smears across the home page's big
+  // card, so anything shown wider than that asks for the original.
+  'still-large': 'original'
 } as const
 
 export function imageUrl(path: string, size: string): string {

@@ -135,6 +135,8 @@ export function App() {
         setPlaying(nowPlaying)
         if (!nowPlaying) {
           void refreshProgress()
+          // The player can change settings too (the sleep timer's night light).
+          void window.cassette.getSettings().then(setSettings)
           setReturns((n) => n + 1)
         }
       }),

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { artUrl, thumbUrl } from '../mediaUrls'
 import { sleeveTone } from '../select'
 
-export type ArtKind = 'poster' | 'backdrop' | 'still'
+export type ArtKind = 'poster' | 'backdrop' | 'still' | 'still-large'
 
 /** How long to wait before a second attempt at an image that failed. */
 const RETRY_DELAY_MS = 1500

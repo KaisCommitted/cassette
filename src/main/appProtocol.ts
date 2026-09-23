@@ -72,13 +72,13 @@ async function serveArt(cache: ArtworkCache, path: string): Promise<Response> {
   return serveLocalFile(file)
 }
 
-/** `/_thumb/<media key>` */
+/** `/_thumb/<media key>`, optionally followed by `/<anything>` to bust caches. */
 async function serveThumb(
   thumbnails: ThumbnailService,
   library: Library | null,
   path: string
 ): Promise<Response> {
-  const key = path.slice('/_thumb/'.length)
+  const key = path.slice('/_thumb/'.length).split('/')[0]!
   const videoPath = findPath(library, key)
   if (!videoPath) return new Response('unknown key', { status: 404 })
 

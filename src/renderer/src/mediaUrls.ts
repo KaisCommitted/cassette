@@ -15,6 +15,14 @@ export function artUrl(tmdbPath: string, kind: ArtKind): string {
   return SAME_ORIGIN ? `/_art/${kind}${tmdbPath}` : `cassette-art://${kind}${tmdbPath}`
 }
 
+/**
+ * Bumped whenever frames are regenerated at a new size. Responses are cached
+ * for a day, so without it the page would keep showing the old, smaller frame.
+ */
+const THUMB_VERSION = 'w1280'
+
 export function thumbUrl(key: string): string {
-  return SAME_ORIGIN ? `/_thumb/${key}` : `cassette-thumb://${key}`
+  return SAME_ORIGIN
+    ? `/_thumb/${key}/${THUMB_VERSION}`
+    : `cassette-thumb://${key}/${THUMB_VERSION}`
 }

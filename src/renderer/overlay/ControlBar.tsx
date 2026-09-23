@@ -209,29 +209,52 @@ export function ControlBar({ state, shown, onMenuOpenChange, onActivity }: Contr
                 ? 'Stopping after this episode'
                 : null
           }
-          items={[
-            ...[15, 30, 45, 60, 90, 120].map((mins) => ({
-              id: String(mins * 60),
-              label: formatSleepOption(mins),
-              selected: false
-            })),
-            {
-              id: 'episode',
-              label: 'At the end of this episode',
-              selected: state.sleepAfterEpisode
-            },
-            {
-              id: 'off',
-              label: 'Cancel timer',
-              selected: state.sleepRemainingSeconds === null && !state.sleepAfterEpisode
-            }
-          ]}
+          // Durations sit in a grid, like speeds, so the menu has room for
+          // the night light without scrolling.
+          layout="grid"
+          items={[15, 30, 45, 60, 90, 120].map((mins) => ({
+            id: String(mins * 60),
+            label: formatSleepOption(mins),
+            selected: false
+          }))}
           onPick={(id) => {
-            if (id === 'episode') void api.setSleepAfterEpisode()
-            else if (id === 'off') void api.setSleepTimer(null)
-            else void api.setSleepTimer(Number(id))
+            void api.setSleepTimer(Number(id))
             setMenu(null)
           }}
+          footer={
+            <>
+              <div className="osd-menu-items osd-menu-after-grid">
+                {[
+                  {
+                    id: 'episode',
+                    label: 'At the end of this episode',
+                    selected: state.sleepAfterEpisode,
+                    run: () => api.setSleepAfterEpisode()
+                  },
+                  {
+                    id: 'off',
+                    label: 'Cancel timer',
+                    selected: state.sleepRemainingSeconds === null && !state.sleepAfterEpisode,
+                    run: () => api.setSleepTimer(null)
+                  }
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    className={item.selected ? 'osd-menu-item is-selected' : 'osd-menu-item'}
+                    aria-pressed={item.selected}
+                    onClick={() => {
+                      void item.run()
+                      setMenu(null)
+                    }}
+                  >
+                    <span className="osd-menu-label">{item.label}</span>
+                    {item.selected && <Icon name="tick" />}
+                  </button>
+                ))}
+              </div>
+              <NightLightSwitch />
+            </>
+          }
         />
       )}
     </div>
@@ -315,6 +338,47 @@ function SubtitleSearch() {
           Try OpenSubtitles
         </button>
       )}
+    </div>
+  )
+}
+
+/**
+ * The sleep timer's night light, switched from where the timer is set.
+ *
+ * It is a standing preference rather than part of one timer, so it is saved
+ * as a setting and is there next time as well.
+ */
+function NightLightSwitch() {
+  const [on, setOn] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void api.getSettings().then((s) => {
+      if (!cancelled) setOn(s.sleepNightLight)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  if (on === null) return null
+  return (
+    <div className="osd-menu-section">
+      <button
+        className="osd-switch-row"
+        role="switch"
+        aria-checked={on}
+        onClick={() => {
+          setOn(!on)
+          void api.updateSettings({ sleepNightLight: !on })
+        }}
+      >
+        <span className="osd-switch-text">
+          <span className="osd-switch-label">Night light</span>
+          <span className="osd-switch-help">Warms, then dims over 10 min</span>
+        </span>
+        <span className="osd-switch" aria-hidden="true" />
+      </button>
     </div>
   )
 }
@@ -404,10 +468,11 @@ function formatCountdown(seconds: number): string {
   return h > 0 ? h + ':' + mm + ':' + ss : m + ':' + ss
 }
 
+/** Short enough for a grid cell: "15 min", "1 hour", "1 h 30". */
 function formatSleepOption(minutes: number): string {
-  if (minutes < 60) return minutes + ' minutes'
+  if (minutes < 60) return minutes + ' min'
   const h = Math.floor(minutes / 60)
   const m = minutes % 60
   if (m === 0) return h === 1 ? '1 hour' : h + ' hours'
-  return h + ' h ' + m + ' min'
+  return h + ' h ' + m
 }

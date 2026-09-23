@@ -36,6 +36,8 @@ export interface AppContext {
   sleepTimer: SleepTimer
   /** Pushes timer and autoplay state into the overlay. */
   publishSessionFlags: () => void
+  /** Cancels the sleep timer, and the night light with it. */
+  endSleep: () => void
   onSettingsChanged?: (settings: Settings) => void
   /** Key of the file currently loaded, so progress ticks know where to go. */
   currentKey: string | null
@@ -43,10 +45,24 @@ export interface AppContext {
   library: Library | null
 }
 
-/** Shows the video and control windows and loads an item. */
-export async function playItem(ctx: AppContext, item: PlayableItem): Promise<void> {
+/**
+ * Shows the video and control windows and loads an item.
+ *
+ * Anything but auto-advance is someone choosing what to watch, which cancels
+ * a sleep timer: it was set for what was playing then.
+ */
+export async function playItem(
+  ctx: AppContext,
+  item: PlayableItem,
+  options: { automatic?: boolean } = {}
+): Promise<void> {
+  if (!options.automatic) ctx.endSleep()
   ctx.currentKey = item.key
-  const resumeAt = ctx.progress.get(item.key)?.positionSeconds ?? 0
+  // Something already watched starts again from the top. Resuming it at its
+  // last second ended it at once, and rolling into an episode marked as
+  // watched did the same.
+  const record = ctx.progress.get(item.key)
+  const resumeAt = record && !record.finished ? record.positionSeconds : 0
   ctx.mpv.setNeighbours(
     ctx.library ? findPrevious(ctx.library, item.key) !== null : false,
     ctx.library ? findNext(ctx.library, item.key) !== null : false
@@ -61,6 +77,7 @@ export async function playItem(ctx: AppContext, item: PlayableItem): Promise<voi
 
 export async function stopPlayback(ctx: AppContext): Promise<void> {
   await ctx.mpv.stop()
+  ctx.endSleep()
   ctx.currentKey = null
   ctx.overlayInteraction.stop()
   // Focus may be on the controls, which are about to go; hand it back to the
@@ -390,8 +407,8 @@ export function registerHandlers(ctx: AppContext): void {
   handle(IPC.previousChapter, () => ctx.mpv.previousChapter())
 
   handle(IPC.setSleepTimer, (seconds: number | null) => {
-    if (seconds === null) ctx.sleepTimer.clear()
-    else ctx.sleepTimer.setDuration(seconds)
+    if (seconds === null) return ctx.endSleep()
+    ctx.sleepTimer.setDuration(seconds)
     ctx.publishSessionFlags()
   })
 

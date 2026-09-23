@@ -8,6 +8,7 @@ import {
   formatAgo,
   formatRemaining,
   keyForPath,
+  seasonSpan,
   sleeveTone,
   summariseSeries
 } from './select'
@@ -127,6 +128,20 @@ describe('describeSeasons', () => {
 
   it('spells out gaps rather than implying a range', () => {
     expect(describeSeasons([1, 3, 6])).toBe('seasons 1, 3 and 6')
+  })
+})
+
+describe('seasonSpan', () => {
+  it('joins a contiguous run with a dash', () => {
+    expect(seasonSpan([3, 4, 5, 6, 7])).toBe('Seasons 3–7')
+  })
+
+  it('names a single season', () => {
+    expect(seasonSpan([4])).toBe('Season 4')
+  })
+
+  it('lists gaps rather than implying a range', () => {
+    expect(seasonSpan([1, 3, 6])).toBe('Seasons 1, 3, 6')
   })
 })
 

@@ -1,5 +1,7 @@
 import { EventEmitter } from 'node:events'
-import { basename } from 'node:path'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { basename, join } from 'node:path'
+import { app } from 'electron'
 import type { PlaybackState, SubtitleStyle, TrackInfo } from '@shared/types'
 import { MpvIpc } from './mpvIpc'
 import { startMpv, type MpvProcess } from './mpvProcess'
@@ -49,6 +51,7 @@ function emptyState(): PlaybackState {
     hasPrevious: false,
     sleepRemainingSeconds: null,
     sleepAfterEpisode: false,
+    nightLight: null,
     autoplayNext: true,
     chapterCount: 0,
     loading: false
@@ -59,6 +62,10 @@ export class MpvController extends EventEmitter {
   private proc: MpvProcess | null = null
   private ipc: MpvIpc | null = null
   private state: PlaybackState = emptyState()
+  /** Path of the warmth shader once written, and whether mpv has it loaded. */
+  private warmShader: string | null = null
+  private warmShaderLoaded = false
+  private warmthApplied = -1
 
   async start(hwnd: Buffer, legacyCompositing = true): Promise<void> {
     this.proc = await startMpv(hwnd, legacyCompositing)
@@ -66,9 +73,11 @@ export class MpvController extends EventEmitter {
     this.ipc.on('property', (name: string, value: unknown) => {
       this.onProperty(name, value)
     })
-    this.ipc.on('event', (event: string) => {
-      // mpv reaching the end of a file is how auto-advance is triggered.
-      if (event === 'end-file') this.emit('end-file')
+    this.ipc.on('event', (event: string, msg: Record<string, unknown>) => {
+      // mpv reaching the end of a file is how auto-advance is triggered. The
+      // reason says whether it really ran out ("eof") or was replaced or
+      // stopped, which also ends the file.
+      if (event === 'end-file') this.emit('end-file', msg['reason'] ?? null)
     })
     for (const name of OBSERVED) await this.ipc.observeProperty(name)
   }
@@ -365,12 +374,43 @@ export class MpvController extends EventEmitter {
   setSessionFlags(flags: {
     sleepRemainingSeconds: number | null
     sleepAfterEpisode: boolean
+    nightLight: PlaybackState['nightLight']
     autoplayNext: boolean
   }): void {
     this.state.sleepRemainingSeconds = flags.sleepRemainingSeconds
     this.state.sleepAfterEpisode = flags.sleepAfterEpisode
+    this.state.nightLight = flags.nightLight
     this.state.autoplayNext = flags.autoplayNext
     this.emit('state', this.getState())
+  }
+
+  /**
+   * Warms the picture, from 0 (untouched) to 1 (fully warm); null removes it.
+   *
+   * A shader rather than a filter: changing `vf` rebuilds the filter chain
+   * and hitches playback, and a filter would need hardware-decoded frames
+   * copied back from the GPU. The shader's strength is a parameter, so
+   * ramping it up is a uniform changing, not a recompile. It is only loaded
+   * while in use, so an ordinary evening pays nothing for it.
+   */
+  async setWarmth(warmth: number | null): Promise<void> {
+    if (warmth === null) {
+      if (!this.warmShaderLoaded || !this.warmShader) return
+      this.warmShaderLoaded = false
+      this.warmthApplied = -1
+      await this.send(['change-list', 'glsl-shaders', 'remove', this.warmShader])
+      return
+    }
+    const value = Math.round(Math.max(0, Math.min(1, warmth)) * 100) / 100
+    if (value === this.warmthApplied && this.warmShaderLoaded) return
+    this.warmthApplied = value
+    // Set before loading, so the shader never shows a frame at its default.
+    await this.send(['set_property', 'glsl-shader-opts', `warmth=${value.toFixed(2)}`])
+    if (!this.warmShaderLoaded) {
+      this.warmShader ??= await writeWarmShader()
+      this.warmShaderLoaded = true
+      await this.send(['change-list', 'glsl-shaders', 'append', this.warmShader])
+    }
   }
 
   async stop(): Promise<void> {
@@ -430,4 +470,36 @@ function withAlpha(hex: string, opacity: number): string {
     .toString(16)
     .padStart(2, '0')
   return `#${alpha}${hex.replace('#', '')}`
+}
+
+/**
+ * The night light: a gentle cut to green and a deeper one to blue, the way a
+ * screen's own night mode shifts, scaled by `warmth`.
+ *
+ * It runs on the finished picture, before subtitles are drawn over it, so
+ * subtitles keep their colour; the overlay's dimming covers them as well.
+ */
+const WARM_SHADER = `//!PARAM warmth
+//!DESC How warm the picture is, 0 to 1
+//!TYPE float
+//!MINIMUM 0.0
+//!MAXIMUM 1.0
+0.0
+
+//!HOOK OUTPUT
+//!BIND HOOKED
+//!DESC Cassette night light
+vec4 hook() {
+    vec4 color = HOOKED_tex(HOOKED_pos);
+    color.rgb *= mix(vec3(1.0), vec3(1.0, 0.82, 0.58), warmth);
+    return color;
+}
+`
+
+async function writeWarmShader(): Promise<string> {
+  const dir = join(app.getPath('userData'), 'shaders')
+  await mkdir(dir, { recursive: true })
+  const path = join(dir, 'night-light.glsl')
+  await writeFile(path, WARM_SHADER, 'utf8')
+  return path
 }

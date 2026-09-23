@@ -118,6 +118,18 @@ export function describeSeasons(numbers: number[]): string {
   return `seasons ${head} and ${numbers[numbers.length - 1]}`
 }
 
+/**
+ * "Seasons 3–7" / "Season 4" / "Seasons 1, 3, 6": the short form, for a line
+ * under a poster, where the sentence form above reads as a run-on.
+ */
+export function seasonSpan(numbers: number[]): string {
+  if (numbers.length === 0) return 'No seasons'
+  if (numbers.length === 1) return `Season ${numbers[0]}`
+  const contiguous = numbers.every((n, i) => i === 0 || n === numbers[i - 1]! + 1)
+  if (contiguous) return `Seasons ${numbers[0]}–${numbers[numbers.length - 1]}`
+  return `Seasons ${numbers.join(', ')}`
+}
+
 export function matchesQuery(text: string, query: string): boolean {
   const q = query.trim().toLowerCase()
   if (q === '') return true

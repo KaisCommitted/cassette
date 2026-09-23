@@ -123,6 +123,12 @@ export function SettingsView(props: SettingsViewProps) {
                   checked={settings.nightAudio}
                   onChange={(v) => props.onChangeSettings({ nightAudio: v })}
                 />
+                <SwitchRow
+                  label="Dim the picture while a sleep timer runs"
+                  help="Warms the colours like a night light and darkens the picture gradually over ten minutes. Cancelling the timer or changing episode yourself puts it back."
+                  checked={settings.sleepNightLight}
+                  onChange={(v) => props.onChangeSettings({ sleepNightLight: v })}
+                />
               </Section>
 
               <SubtitleSettings

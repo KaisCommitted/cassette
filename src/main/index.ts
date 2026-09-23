@@ -6,6 +6,7 @@ import { BindingsStore } from './input/bindingsStore'
 import { GlobalHotkeyMachine } from './input/globalHotkey'
 import { startNativeHook } from './input/nativeHook'
 import { findNext, findPrevious } from './library/playQueue'
+import { NightLight } from './player/nightLight'
 import { SleepTimer } from './player/sleepTimer'
 import { chooseAudioTrack, chooseSubtitleTrack } from './player/trackChoice'
 import { killRunningProbes } from './library/mediaProbe'
@@ -197,19 +198,35 @@ async function bootstrap(): Promise<void> {
   // Handlers must be registered before the renderer mounts and starts calling
   // them. Starting mpv takes hundreds of milliseconds, so it must not come
   // first — the renderer's initial getLibrary() would arrive with no handler.
+  const nightLight = new NightLight()
   const sleepTimer = new SleepTimer({
     pause: () => {
+      // Stay dim over whoever just fell asleep; see NightLight.
+      nightLight.hold()
       void mpv.setPaused(true)
       publishSessionFlags()
     }
   })
 
   const publishSessionFlags = (): void => {
+    nightLight.sync(settings.get().sleepNightLight, sleepTimer.isSet)
+    const level = nightLight.level()
     mpv.setSessionFlags({
       sleepRemainingSeconds: sleepTimer.remainingSeconds(),
       sleepAfterEpisode: sleepTimer.stopsAfterEpisode,
+      nightLight: level,
       autoplayNext: settings.get().autoplayNext
     })
+    void mpv.setWarmth(level ? level.warmth : null).catch((error: Error) => {
+      console.error('[cassette] night light failed:', error.message)
+    })
+  }
+
+  /** Cancels the sleep timer and anything it was doing to the picture. */
+  const endSleep = (): void => {
+    sleepTimer.clear()
+    nightLight.stop()
+    publishSessionFlags()
   }
 
   ctx = {
@@ -220,6 +237,7 @@ async function bootstrap(): Promise<void> {
     metadata,
     sleepTimer,
     publishSessionFlags,
+    endSleep,
     onSettingsChanged: () => publishSessionFlags(),
     mainWindow,
     videoWindow,
@@ -331,7 +349,6 @@ async function bootstrap(): Promise<void> {
       case 'stop':
         if (!state.path) return
         if (ctx) await stopPlayback(ctx)
-        sleepTimer.clear()
         hotkey.clear()
         return
       default:
@@ -423,17 +440,21 @@ async function bootstrap(): Promise<void> {
 
   // Auto-advance: when an episode finishes, roll into the next one. This
   // crosses season boundaries, because findNext walks the series in order.
-  mpv.on('end-file', () => {
+  mpv.on('end-file', (reason: string | null) => {
     void (async () => {
+      // Only advance on a genuine end, not on a stop or a replace-load —
+      // which mpv's reason says outright. This used to be guessed from the
+      // position, which was wrong both ways: loading a file clears the
+      // duration first, so pressing Next looked like a finished episode and
+      // rolled on again, skipping one; and mpv often reports the position as
+      // gone before the end itself, so a real ending looked cut short and
+      // the player sat on a blank screen instead of moving on.
+      if (reason !== 'eof') return
       if (!ctx?.library || !ctx.currentKey) return
       const finishedKey = ctx.currentKey
-      const state = mpv.getState()
-      // Only advance on a genuine end, not on a stop or a replace-load.
-      if (state.durationSeconds > 0 && state.positionSeconds < state.durationSeconds - 5) {
-        return
-      }
       // A sleep timer set to "after this episode" wins over autoplay.
       if (sleepTimer.shouldStopAtEpisodeEnd()) {
+        nightLight.hold()
         await mpv.setPaused(true)
         publishSessionFlags()
         return
@@ -442,8 +463,10 @@ async function bootstrap(): Promise<void> {
         await stopPlayback(ctx)
         return
       }
+      // Rolling on by itself keeps the sleep timer; changing episode by hand
+      // is a sign someone is awake, and cancels it.
       const next = findNext(ctx.library, finishedKey)
-      if (next) await playItem(ctx, next)
+      if (next) await playItem(ctx, next, { automatic: true })
       else await stopPlayback(ctx)
     })().catch((error: Error) => {
       console.error(`[cassette] auto-advance failed:`, error.message)
@@ -495,9 +518,15 @@ async function bootstrap(): Promise<void> {
     })
   })
 
-  // Keep the countdown on screen ticking.
+  // Resuming after the timer paused playback means someone woke up: put the
+  // picture back.
+  mpv.on('state', (state: PlaybackState) => {
+    if (nightLight.notePaused(state.paused)) publishSessionFlags()
+  })
+
+  // Keep the countdown on screen ticking, and the night light ramping.
   const sleepTick = setInterval(() => {
-    if (sleepTimer.isSet) publishSessionFlags()
+    if (sleepTimer.isSet || nightLight.isOn) publishSessionFlags()
   }, 1000)
   sleepTick.unref?.()
 

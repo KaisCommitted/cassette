@@ -112,6 +112,11 @@ export interface Settings {
   /** Even out loud and quiet passages — for watching at low volume. */
   nightAudio: boolean
   /**
+   * While a sleep timer runs, warm the picture and dim it over ten minutes.
+   * Cancelling the timer, or anything else that ends it early, undoes it.
+   */
+  sleepNightLight: boolean
+  /**
    * Shortest file worth listing, in minutes.
    *
    * Libraries collect trailers, samples, featurettes and stray clips that are
@@ -169,6 +174,12 @@ export interface PlaybackState {
   sleepRemainingSeconds: number | null
   /** Pause once the current episode ends rather than after a fixed time. */
   sleepAfterEpisode: boolean
+  /**
+   * How far the sleep timer's night light has got, each from 0 to 1, or null
+   * when the picture is untouched. The overlay draws the dimming; the warmth
+   * is applied inside mpv.
+   */
+  nightLight: { warmth: number; dim: number } | null
   autoplayNext: boolean
   chapterCount: number
   /** True while mpv is loading a file, so the UI can show a spinner. */
@@ -187,6 +198,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoEnableSubtitles: true,
   subtitleStyle: DEFAULT_SUBTITLE_STYLE,
   nightAudio: false,
+  sleepNightLight: false,
   minimumDurationMinutes: 15
 }
 
