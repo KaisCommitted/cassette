@@ -213,6 +213,20 @@ export class MpvController extends EventEmitter {
     await this.send(['seek', seconds, 'relative'])
   }
 
+  /**
+   * Draws the current frame again, where it is.
+   *
+   * mpv only draws when it has a frame to show, and a paused picture has none
+   * coming. When the window around it is resized — going fullscreen, leaving
+   * it — the video window repaints its own black page over the child mpv
+   * draws into, and the paused picture stays black until playback resumes.
+   * An exact seek to where it already is makes mpv present that frame again.
+   */
+  async redraw(): Promise<void> {
+    if (!this.state.path || this.state.loading) return
+    await this.send(['seek', 0, 'relative+exact'])
+  }
+
   async seekAbsolute(seconds: number): Promise<void> {
     const clamped = Math.max(0, Math.min(this.state.durationSeconds || seconds, seconds))
     await this.send(['seek', clamped, 'absolute'])

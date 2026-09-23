@@ -37,7 +37,15 @@ public class Win32 {
     [DllImport("user32.dll")]
     public static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
     [DllImport("user32.dll")]
-    public static extern void keybd_event(byte vk, byte scan, int flags, IntPtr extra);
+    public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")]
+    public static extern uint GetWindowThreadProcessId(IntPtr h, IntPtr p);
+    [DllImport("kernel32.dll")]
+    public static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")]
+    public static extern bool AttachThreadInput(uint a, uint b, bool attach);
+    [DllImport("user32.dll")]
+    public static extern bool BringWindowToTop(IntPtr h);
     [DllImport("gdi32.dll")]
     public static extern bool BitBlt(IntPtr dest, int x, int y, int w, int h, IntPtr src, int sx, int sy, int rop);
 }
@@ -57,9 +65,16 @@ $hwnd = $proc.MainWindowHandle
 
 [void][Win32]::ShowWindow($hwnd, 9)   # SW_RESTORE
 if ($Focus) {
-    # A tap of Alt is what lets a background process hand focus over.
-    [Win32]::keybd_event(0x12, 0, 0, [IntPtr]::Zero)
-    [Win32]::keybd_event(0x12, 0, 2, [IntPtr]::Zero)
+    # Joining the foreground window's input queue for a moment is what lets a
+    # background process hand focus over. No key is pressed: an injected key
+    # lands in whatever app is in front, which is how an earlier version of
+    # this sent keystrokes into another player.
+    $fg = [Win32]::GetWindowThreadProcessId([Win32]::GetForegroundWindow(), [IntPtr]::Zero)
+    $me = [Win32]::GetCurrentThreadId()
+    [void][Win32]::AttachThreadInput($me, $fg, $true)
+    [void][Win32]::BringWindowToTop($hwnd)
+    [void][Win32]::SetForegroundWindow($hwnd)
+    [void][Win32]::AttachThreadInput($me, $fg, $false)
 }
 [void][Win32]::SetForegroundWindow($hwnd)
 Start-Sleep -Milliseconds 700

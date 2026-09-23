@@ -538,6 +538,26 @@ async function bootstrap(): Promise<void> {
   mainWindow.on('leave-full-screen', () => mpv.setFullscreen(false))
   mainWindow.on('enter-full-screen', () => mpv.setFullscreen(true))
 
+  // A paused picture is not redrawn by anything once the window around it
+  // changes size, so it goes black; ask for it again once the resize settles.
+  let redrawTimer: ReturnType<typeof setTimeout> | null = null
+  const redrawIfPaused = (): void => {
+    if (redrawTimer) clearTimeout(redrawTimer)
+    redrawTimer = setTimeout(() => {
+      redrawTimer = null
+      const state = mpv.getState()
+      if (!state.path || !state.paused) return
+      void mpv.redraw().catch((error: Error) => {
+        console.error('[cassette] redraw failed:', error.message)
+      })
+    }, 250)
+  }
+  mainWindow.on('resize', redrawIfPaused)
+  mainWindow.on('enter-full-screen', redrawIfPaused)
+  mainWindow.on('leave-full-screen', redrawIfPaused)
+  mainWindow.on('restore', redrawIfPaused)
+  mainWindow.on('focus', redrawIfPaused)
+
   // CASSETTE_AUTOPLAY starts the first episode unattended, so rendering can be
   // verified by screen capture without a person driving the UI.
   if (process.env.CASSETTE_AUTOPLAY === '1') {

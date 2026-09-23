@@ -14,11 +14,24 @@ export interface OverlayInteraction {
 /**
  * Drives the overlay from the main process by polling the cursor.
  *
- * The overlay is click-through and non-focusable, so it cannot be relied on to
- * receive mouse events of its own — forwarded moves never arrived, which left
- * the controls permanently hidden. Main always knows where the cursor is, so
- * it decides both when to reveal the controls and when the overlay should
- * accept clicks.
+ * The overlay is non-focusable, so it cannot be relied on to receive mouse
+ * moves of its own — forwarded moves never arrived, which left the controls
+ * permanently hidden. Main always knows where the cursor is, so it decides
+ * when to reveal the controls.
+ *
+ * It takes clicks for the whole time the player is open, and is click-through
+ * only while hidden. It used to switch between the two whenever the cursor
+ * crossed the window's edge, and at every fullscreen change, which was ruinous
+ * on Windows: Electron implements click-through by adding and removing the
+ * window's WS_EX_LAYERED style along with WS_EX_TRANSPARENT, so the one window
+ * whose transparency the whole player depends on was losing and regaining its
+ * layer dozens of times an episode. Logged against the released build, that
+ * churn is where the black picture, the controls that stopped taking clicks
+ * and the pile of phantom Cassette entries in Alt-Tab came from.
+ *
+ * Nothing needs the switching. The overlay covers exactly the content area,
+ * so a cursor outside it is not over it anyway, and while it is hidden it
+ * takes nothing.
  */
 export function createOverlayInteraction(
   mainWindow: BrowserWindow,
@@ -26,13 +39,10 @@ export function createOverlayInteraction(
 ): OverlayInteraction {
   let timer: ReturnType<typeof setInterval> | null = null
   let last = { x: -1, y: -1 }
-  let interactive: boolean | null = null
 
+  // No forwarding: see createOverlayWindow for why it is not harmless.
   const setInteractive = (next: boolean): void => {
-    if (next === interactive || overlay.isDestroyed()) return
-    interactive = next
-    // No forwarding: see createOverlayWindow for why it is not harmless.
-    overlay.setIgnoreMouseEvents(!next)
+    if (!overlay.isDestroyed()) overlay.setIgnoreMouseEvents(!next)
   }
 
   const tick = (): void => {
@@ -52,18 +62,16 @@ export function createOverlayInteraction(
     if (moved && inside) {
       overlay.webContents.send(IPC.overlayActivity)
     }
-
-    // Interactive across the whole window while playing, not just over the
-    // control bar: the video fills the window, so mouse bindings (wheel for
-    // volume, side buttons, double click for fullscreen) need to land
-    // somewhere, and mpv itself is given no input handling at all.
-    setInteractive(inside)
   }
 
   return {
     start: () => {
       if (timer) return
-      interactive = null
+      // Interactive across the whole window while playing, not just over the
+      // control bar: the video fills the window, so mouse bindings (wheel for
+      // volume, side buttons, double click for fullscreen) need to land
+      // somewhere, and mpv itself is given no input handling at all.
+      setInteractive(true)
       timer = setInterval(tick, POLL_MS)
     },
     stop: () => {
