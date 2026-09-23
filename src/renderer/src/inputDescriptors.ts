@@ -4,16 +4,12 @@
  * Keyboard and mouse produce the same `source:name` shape, which is what makes
  * every action bindable to either without special cases.
  */
+import { canonicalKey } from '@shared/keys'
 
 export type Captured =
   | { type: 'key'; event: KeyboardEvent }
-  | { type: 'mouse'; event: MouseEvent }
+  | { type: 'mouse'; event: MouseEvent; double?: boolean }
   | { type: 'wheel'; event: WheelEvent }
-
-function canonicalKey(key: string): string {
-  if (key === ' ') return 'Space'
-  return key.length === 1 ? key.toLowerCase() : key
-}
 
 export function describeCaptured(captured: Captured): string {
   if (captured.type === 'wheel') {
@@ -22,7 +18,7 @@ export function describeCaptured(captured: Captured): string {
 
   if (captured.type === 'mouse') {
     const e = captured.event
-    if (e.detail >= 2) return 'mouse:double'
+    if (captured.double || e.detail >= 2) return 'mouse:double'
     switch (e.button) {
       case 0:
         return 'mouse:left'
@@ -48,13 +44,25 @@ export function describeCaptured(captured: Captured): string {
   return `key:${parts.join('+')}`
 }
 
-export function humaniseDescriptor(descriptor: string): string {
+const KEY_NAMES: Record<string, string> = {
+  Left: '←',
+  Right: '→',
+  Up: '↑',
+  Down: '↓',
+  Escape: 'Esc',
+  PageUp: 'Page up',
+  PageDown: 'Page down',
+  ' ': 'Space'
+}
+
+/** The pieces of a binding as they are printed on keycaps: `Ctrl`, `←`. */
+export function descriptorParts(descriptor: string): string[] {
   if (descriptor.startsWith('key:')) {
-    return descriptor
-      .slice(4)
-      .split('+')
-      .map((part) => (part.length === 1 ? part.toUpperCase() : part))
-      .join(' + ')
+    const body = descriptor.slice(4)
+    const parts = body.endsWith('+')
+      ? [...body.slice(0, -1).split('+').filter(Boolean), '+']
+      : body.split('+')
+    return parts.map((part) => KEY_NAMES[part] ?? (part.length === 1 ? part.toUpperCase() : part))
   }
   const names: Record<string, string> = {
     left: 'Left click',
@@ -67,5 +75,9 @@ export function humaniseDescriptor(descriptor: string): string {
     double: 'Double click'
   }
   const name = descriptor.slice(6)
-  return names[name] ?? name
+  return [names[name] ?? name]
+}
+
+export function humaniseDescriptor(descriptor: string): string {
+  return descriptorParts(descriptor).join(' + ')
 }

@@ -25,8 +25,6 @@ export interface HomeViewProps {
   library: Library
   progress: Map<string, ProgressRecord>
   metadata: MetadataSnapshot
-  /** Title currently being fetched, or null when idle. */
-  metadataBusy: string | null
   query: string
   scope: Scope
   onScopeChange: (scope: Scope) => void
@@ -116,7 +114,6 @@ export function HomeView(props: HomeViewProps) {
               seriesCount={library.series.length}
               filmCount={library.movies.length}
               onChange={props.onScopeChange}
-              note={props.metadataBusy ? `Fetching artwork for ${props.metadataBusy}` : null}
             />
           )}
         </>
@@ -447,14 +444,12 @@ function ScopeBar({
   scope,
   seriesCount,
   filmCount,
-  onChange,
-  note
+  onChange
 }: {
   scope: Scope
   seriesCount: number
   filmCount: number
   onChange: (scope: Scope) => void
-  note: string | null
 }) {
   const options: { id: Scope; label: string; count: number }[] = [
     { id: 'all', label: 'Everything', count: seriesCount + filmCount },
@@ -476,7 +471,6 @@ function ScopeBar({
           </button>
         ))}
       </div>
-      {note && <span className="busy-note">{note}</span>}
     </div>
   )
 }

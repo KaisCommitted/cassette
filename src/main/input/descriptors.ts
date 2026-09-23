@@ -1,3 +1,5 @@
+import { canonicalKey } from '@shared/keys'
+
 export interface KeyDescriptor {
   key: string
   control: boolean
@@ -5,10 +7,6 @@ export interface KeyDescriptor {
   shift: boolean
 }
 
-/** Single-character keys are compared case-insensitively; named keys are not. */
-function canonicalKey(key: string): string {
-  return key.length === 1 ? key.toLowerCase() : key
-}
 
 export function describeKey(e: KeyDescriptor): string {
   const parts: string[] = []

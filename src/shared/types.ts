@@ -257,12 +257,21 @@ export interface CassetteApi {
   runInput: (descriptor: string) => void
   getBindings: () => Promise<KeyBindings>
   assignBinding: (descriptor: string, actionId: string) => Promise<KeyBindings>
+  /** Removes one binding; a default removed this way stays removed. */
+  unassignBinding: (descriptor: string) => Promise<KeyBindings>
   resetBindings: () => Promise<KeyBindings>
+  /**
+   * Tells the main process a text box has focus, so no binding can take a
+   * keystroke meant for it.
+   */
+  setTyping: (typing: boolean) => void
 
   /** Fires when the cursor moves over the player, to reveal the controls. */
   onOverlayActivity: (cb: () => void) => () => void
-  /** Fires when artwork finishes downloading after a scan. */
+  /** Fires as artwork arrives, and once more when it has all been fetched. */
   onMetadataReady: (cb: (m: MetadataSnapshot) => void) => () => void
+  /** Fires as TMDB is asked about each title in turn. */
+  onMetadataProgress: (cb: (p: MetadataProgressInfo) => void) => () => void
 }
 
 declare global {
@@ -322,6 +331,8 @@ export const IPC = {
   runInput: 'input:run',
   getBindings: 'input:getBindings',
   assignBinding: 'input:assignBinding',
+  unassignBinding: 'input:unassignBinding',
+  setTyping: 'input:typing',
   resetBindings: 'input:resetBindings',
   playbackState: 'player:state'
 } as const
@@ -400,6 +411,14 @@ export interface SubtitleScanResult {
   label: string
   status: 'has-embedded' | 'already-had-one' | 'downloaded' | 'nothing-found' | 'failed'
   detail?: string
+}
+
+/** How far an artwork lookup has got; `done === total` means finished. */
+export interface MetadataProgressInfo {
+  done: number
+  total: number
+  /** The title being looked up, empty once finished. */
+  current: string
 }
 
 /** How far a library scan has got. Both zero means it is not running. */

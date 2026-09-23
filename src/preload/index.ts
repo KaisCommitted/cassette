@@ -5,6 +5,7 @@ import {
   type ScanProgressInfo,
   type Library,
   type CassetteApi,
+  type MetadataProgressInfo,
   type MetadataSnapshot,
   type PlaybackState,
   type ProgressRecord,
@@ -78,7 +79,12 @@ const api: CassetteApi = {
   },
   getBindings: () => invoke(IPC.getBindings),
   assignBinding: (descriptor, actionId) => invoke(IPC.assignBinding, descriptor, actionId),
+  unassignBinding: (descriptor) => invoke(IPC.unassignBinding, descriptor),
   resetBindings: () => invoke(IPC.resetBindings),
+  setTyping: (typing) => {
+    ipcRenderer.send(IPC.setTyping, typing)
+  },
+  onMetadataProgress: (cb) => subscribe<MetadataProgressInfo>(IPC.metadataProgress, cb),
 
   onPlaybackState: (cb) => {
     const listener = (_e: unknown, s: PlaybackState): void => cb(s)

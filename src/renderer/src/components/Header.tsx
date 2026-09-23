@@ -1,5 +1,5 @@
-import { forwardRef } from 'react'
-import type { ScanProgressInfo } from '@shared/types'
+import { forwardRef, useEffect, useState } from 'react'
+import type { MetadataProgressInfo, ScanProgressInfo } from '@shared/types'
 import { Icon, Logo } from '../../shared/Icon'
 
 export interface HeaderProps {
@@ -10,6 +10,8 @@ export interface HeaderProps {
   onSettings: () => void
   scanning: boolean
   scanProgress: ScanProgressInfo | null
+  /** A TMDB lookup under way, or null. */
+  artwork: MetadataProgressInfo | null
 }
 
 /**
@@ -21,9 +23,22 @@ export interface HeaderProps {
  * started from settings and outlast your visit there.
  */
 export const Header = forwardRef<HTMLInputElement, HeaderProps>(function Header(
-  { current, query, onQueryChange, onLibrary, onSettings, scanning, scanProgress },
+  { current, query, onQueryChange, onLibrary, onSettings, scanning, scanProgress, artwork },
   searchRef
 ) {
+  // A lookup where every title is already known finishes in a blink; saying
+  // anything about it would only flash. Only one that keeps going is shown.
+  const [artworkShown, setArtworkShown] = useState(false)
+  const busy = artwork !== null
+  useEffect(() => {
+    if (!busy) {
+      setArtworkShown(false)
+      return
+    }
+    const timer = setTimeout(() => setArtworkShown(true), 800)
+    return () => clearTimeout(timer)
+  }, [busy])
+
   return (
     <header className="topbar">
       <button className="brand" onClick={onLibrary} aria-label="Cassette, go to the library">
@@ -53,6 +68,17 @@ export const Header = forwardRef<HTMLInputElement, HeaderProps>(function Header(
       </nav>
 
       <div className="topbar-end">
+        {!scanning && artworkShown && artwork && (
+          <span className="scan-chip" role="status" title={artwork.current}>
+            <span className="scan-chip-bar" aria-hidden="true">
+              <span style={{ width: `${(artwork.done / artwork.total) * 100}%` }} />
+            </span>
+            <span className="scan-chip-text">
+              Artwork {artwork.done} of {artwork.total}
+            </span>
+          </span>
+        )}
+
         {scanning && (
           <button className="scan-chip" onClick={onSettings} title="Scan progress in Settings">
             <span className="scan-chip-bar" aria-hidden="true">

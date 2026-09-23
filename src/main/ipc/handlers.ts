@@ -81,18 +81,31 @@ export async function stopPlayback(ctx: AppContext): Promise<void> {
 }
 
 
+/** How often artwork found so far is handed to the library while a lookup runs. */
+const PARTIAL_SNAPSHOT_MS = 2000
+
 /** Fills in artwork after a scan, in the background so browsing is not held up. */
 export function enrichInBackground(ctx: AppContext): void {
   const token = withBundledKeys(ctx.settings.get()).tmdbApiKey
   if (!token || !ctx.library) return
   const library = ctx.library
+  // A first scan of a big folder asks TMDB about hundreds of titles, one at a
+  // time. Sending what has arrived every couple of seconds lets posters fill
+  // in as they come rather than all at once when the last title is done.
+  let lastSnapshot = Date.now()
   void ctx.metadata
     .enrich(library, new TmdbClient(token), {
       onProgress: (progress) => {
-        if (!ctx.mainWindow.isDestroyed()) {
-          ctx.mainWindow.webContents.send(IPC.metadataProgress, progress)
+        if (ctx.mainWindow.isDestroyed()) return
+        ctx.mainWindow.webContents.send(IPC.metadataProgress, progress)
+        if (Date.now() - lastSnapshot >= PARTIAL_SNAPSHOT_MS) {
+          lastSnapshot = Date.now()
+          ctx.mainWindow.webContents.send(IPC.metadataReady, ctx.metadata.snapshot())
         }
       }
+    })
+    .catch((error: Error) => {
+      console.error('[cassette] artwork lookup failed:', error.message)
     })
     .then(() => {
       if (!ctx.mainWindow.isDestroyed()) {
@@ -328,6 +341,7 @@ export function registerHandlers(ctx: AppContext): void {
   handle(IPC.assignBinding, (descriptor: string, actionId: string) =>
     ctx.bindings.assign(descriptor, actionId)
   )
+  handle(IPC.unassignBinding, (descriptor: string) => ctx.bindings.unassign(descriptor))
   handle(IPC.resetBindings, () => ctx.bindings.reset())
 
   // A plain message, not invoke: it fires on every pointer move over the

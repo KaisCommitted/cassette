@@ -85,4 +85,41 @@ describe('BindingsStore', () => {
     await s.unassign('key:Space')
     expect(s.resolve('key:Space')).toBeNull()
   })
+
+  it('keeps a cleared default cleared after a reload', async () => {
+    const file = 'cleared.json'
+    const a = store(file)
+    await a.load()
+    await a.unassign('key:m')
+    const b = store(file)
+    await b.load()
+    expect(b.resolve('key:m')).toBeNull()
+    expect(b.descriptorsFor('mute')).not.toContain('key:m')
+    expect(Object.keys(b.all())).not.toContain('key:m')
+  })
+
+  it('gives a cleared default back on reset', async () => {
+    const s = store()
+    await s.load()
+    await s.unassign('key:m')
+    await s.reset()
+    expect(s.resolve('key:m')).toBe('mute')
+  })
+
+  it('treats Chromium and hook spellings of a key as one', async () => {
+    const s = store()
+    await s.load()
+    expect(s.resolve('key:ArrowLeft')).toBe('seekShortBack')
+    expect(s.resolve('key:Ctrl+ArrowRight')).toBe('seekMediumForward')
+    expect(s.resolve('key: ')).toBe('playPause')
+  })
+
+  it('folds an older file that spelt arrows both ways into one entry', async () => {
+    const { writeFile } = await import('node:fs/promises')
+    const file = join(dir, 'old-spelling.json')
+    await writeFile(file, JSON.stringify({ 'key:Left': 'seekShortBack', 'key:ArrowLeft': 'seekShortBack' }))
+    const s = new BindingsStore(file)
+    await s.load()
+    expect(s.descriptorsFor('seekShortBack').filter((d) => d.includes('Left') && !d.includes('Ctrl'))).toEqual(['key:Left'])
+  })
 })

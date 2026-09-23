@@ -122,10 +122,13 @@ real libraries through it — the one on this machine, and a generated one of
 - **Text boxes save on leaving them**, not per keystroke. Per-keystroke saving
   refilled the box from the main process' answer and dropped a trailing comma,
   so a second preferred language could not be typed.
-- **Bindings as keycaps with Add**, which names what pressing a binding always
-  did. Cancel now cancels instead of being bound as a left click, and the click
-  after a captured mouse press no longer presses whatever is under the
-  pointer.
+- **Bindings as keycaps**, each with a cross that removes it, and Add. Adding
+  opens a listening row: keys are read from anywhere, mouse buttons, double
+  clicks and the wheel only from a pad in that row, so Cancel and the rest of
+  the page never get bound by accident. A key already doing something else
+  asks before moving. Restoring the defaults asks first.
+- **Bindings only act in the player.** In the library every key belongs to the
+  page, and while a text box has focus no binding can take a keystroke.
 - **The subtitle preview sits on a backdrop from your library** and shows the
   lift off the bottom; outline and background only mean something over a
   picture.

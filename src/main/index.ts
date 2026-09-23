@@ -383,10 +383,27 @@ async function bootstrap(): Promise<void> {
     'stop'
   ])
 
+  /**
+   * Whether a text box in the library has focus, as reported by the page.
+   *
+   * Typing always wins over a binding. The main process cannot see the
+   * page's focus, so the renderer says when it changes.
+   */
+  let typing = false
+  ipcMain.on(IPC.setTyping, (_event, value: boolean) => {
+    typing = value === true
+  })
+
   // Keyboard: Chromium only sees these while the main window has focus,
   // which is exactly the scope we want — nothing here is global.
   mainWindow.webContents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown') return
+    // Bindings drive the player and nothing else. With nothing playing,
+    // every key belongs to the page: to typing in search, to Tab and Enter,
+    // and to the settings screen listening for a new binding. This used to
+    // hold back only seek-style actions, so M, F and the arrows were taken
+    // from the search box — typing "amen" left "aen" and muted the player.
+    if (!mpv.getState().path || typing) return
     const action = ctx?.bindings.resolve(
       describeKey({
         key: input.key,
@@ -395,9 +412,10 @@ async function bootstrap(): Promise<void> {
         shift: input.shift
       })
     )
-    if (!action) return
-    // Typing in the search box must not fire playback shortcuts.
-    if (playerOnly.has(action) && !mpv.getState().path) return
+    // The pause-and-hide key belongs to the native hook, which sees it
+    // whether or not this window has focus. Running it here as well fired it
+    // twice for one press — hide, then straight back.
+    if (!action || action === 'hideAndPause') return
     event.preventDefault()
     runActionSafely(action)
   })

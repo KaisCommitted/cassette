@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { KeyBindings, MetadataSnapshot, Settings } from '@shared/types'
+import type {
+  KeyBindings,
+  MetadataProgressInfo,
+  MetadataSnapshot,
+  Settings
+} from '@shared/types'
 import { useLibrary } from './useLibrary'
 import { useAmbient } from './useAmbient'
 import { artUrl } from './mediaUrls'
@@ -13,6 +18,20 @@ import { SetupView } from './views/SetupView'
 import { Logo } from '../shared/Icon'
 
 type View = { name: 'home' } | { name: 'series'; id: string } | { name: 'settings' }
+
+/**
+ * A box you type into. A focused switch or slider does not count: it should
+ * not stop Escape or / from working, and it has no letters to protect.
+ */
+function isTextEntry(element: Element | null): boolean {
+  if (element instanceof HTMLInputElement) {
+    return !['checkbox', 'radio', 'range', 'color', 'button', 'submit'].includes(element.type)
+  }
+  return (
+    element instanceof HTMLTextAreaElement ||
+    (element instanceof HTMLElement && element.isContentEditable)
+  )
+}
 
 /** Where a view's scroll position and focus are remembered. */
 function viewKey(view: View, query: string): string {
@@ -38,9 +57,8 @@ export function App() {
     episodes: {},
     pinned: {}
   })
-  // Never set by anything today: the preload does not pass on the main
-  // process' progress events. Kept so the note appears if it ever does.
-  const [metadataBusy, setMetadataBusy] = useState<string | null>(null)
+  /** An artwork lookup under way, or null. */
+  const [artwork, setArtwork] = useState<MetadataProgressInfo | null>(null)
 
   const [playing, setPlaying] = useState(false)
   /** What was on screen last, so a returning view can put you back on it. */
@@ -68,8 +86,15 @@ export function App() {
     () =>
       window.cassette.onMetadataReady((next) => {
         setMetadata(next)
-        setMetadataBusy(null)
       }),
+    []
+  )
+
+  useEffect(
+    () =>
+      window.cassette.onMetadataProgress((p) =>
+        setArtwork(p.total > 0 && p.done < p.total ? p : null)
+      ),
     []
   )
 
@@ -183,17 +208,25 @@ export function App() {
 
   // ---- keyboard ----
 
+  // Typing beats every binding. The main process resolves bindings before the
+  // page sees a key, so it has to be told when a text box has focus.
+  useEffect(() => {
+    const report = (): void => window.cassette.setTyping(isTextEntry(document.activeElement))
+    // On focusout the next element is not focused yet, so look a tick later.
+    const later = (): void => void setTimeout(report, 0)
+    document.addEventListener('focusin', report)
+    document.addEventListener('focusout', later)
+    report()
+    return () => {
+      document.removeEventListener('focusin', report)
+      document.removeEventListener('focusout', later)
+    }
+  }, [])
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.defaultPrevented || playingRef.current) return
-      const target = e.target as HTMLElement | null
-      // Only boxes you type into count: a focused switch or slider should not
-      // stop Escape or / from working.
-      const typing =
-        (target instanceof HTMLInputElement &&
-          !['checkbox', 'radio', 'range', 'color', 'button'].includes(target.type)) ||
-        target instanceof HTMLTextAreaElement ||
-        target?.isContentEditable === true
+      const typing = isTextEntry(e.target as Element | null)
 
       if ((e.key === '/' && !typing) || (e.key === 'f' && e.ctrlKey && !e.altKey)) {
         e.preventDefault()
@@ -285,6 +318,7 @@ export function App() {
         onSettings={() => navigate({ name: 'settings' }, 'page-start')}
         scanning={lib.scanning}
         scanProgress={lib.scanProgress}
+        artwork={artwork}
       />
 
       <UpdateBanner />
@@ -296,7 +330,6 @@ export function App() {
             library={library}
             progress={progress}
             metadata={metadata}
-            metadataBusy={metadataBusy}
             query={query}
             scope={scope}
             onScopeChange={setScope}
@@ -353,6 +386,9 @@ export function App() {
             onCancelScan={() => void lib.cancelScan()}
             onAssign={(descriptor, actionId) => {
               void window.cassette.assignBinding(descriptor, actionId).then(setBindings)
+            }}
+            onUnassign={(descriptor) => {
+              void window.cassette.unassignBinding(descriptor).then(setBindings)
             }}
             onChangeSettings={(changes) => {
               void window.cassette.updateSettings(changes).then(setSettings)

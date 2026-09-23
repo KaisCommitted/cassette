@@ -310,21 +310,29 @@ label.setting-row {
   border-top: 1px solid var(--line);
 }
 .bind-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto 84px;
-  align-items: center;
-  gap: 16px;
-  min-height: 46px;
-  padding: 6px 4px 6px 10px;
   border-bottom: 1px solid var(--line);
   border-radius: var(--r-sm);
   transition: background-color var(--t-quick) ease;
 }
-.bind-row.is-listening {
-  background: var(--brass-soft);
+.bind-row.is-open {
+  background: oklch(0.752 0.118 82 / 0.07);
+}
+.bind-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 84px;
+  align-items: center;
+  gap: 16px;
+  min-height: 48px;
+  padding: 6px 4px 6px 10px;
 }
 .bind-action {
+  display: grid;
+  gap: 2px;
   font-size: var(--text-sm);
+}
+.bind-note {
+  color: var(--faint);
+  font-size: var(--text-xs);
 }
 .bind-keys {
   display: flex;
@@ -332,11 +340,65 @@ label.setting-row {
   justify-content: flex-end;
   gap: 6px;
 }
+
+/* One binding: its keycaps, and a cross that takes it off. */
+.binding {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 2px 2px 4px;
+  border-radius: var(--r-md);
+  transition: background-color var(--t-settle) ease;
+}
+.binding:hover,
+.binding:focus-within {
+  background: oklch(0.906 0.02 80 / 0.06);
+}
+/* Just added, or pressed again: a brief brass wash says which one. */
+.binding.is-new {
+  animation: binding-new 1.2s var(--ease-out) both;
+}
+@keyframes binding-new {
+  from {
+    background: oklch(0.752 0.118 82 / 0.35);
+  }
+}
+.binding-remove {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--faint);
+  opacity: 0.55;
+  transition:
+    opacity var(--t-quick) ease,
+    color var(--t-quick) ease,
+    background-color var(--t-quick) ease;
+}
+.binding-remove .icon {
+  width: 14px;
+  height: 14px;
+}
+.binding:hover .binding-remove,
+.binding-remove:focus-visible {
+  opacity: 1;
+}
+.binding-remove:hover {
+  color: var(--cream);
+  background: oklch(0.68 0.15 32 / 0.35);
+}
+
 .keycap {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  min-width: 26px;
   height: 26px;
-  padding: 0 9px;
+  padding: 0 8px;
   border: 1px solid var(--line-strong);
   border-bottom-width: 2px;
   border-radius: var(--r-sm);
@@ -349,16 +411,61 @@ label.setting-row {
   color: var(--faint);
   font-size: var(--text-sm);
 }
-.bind-prompt {
+.bind-add {
+  justify-self: end;
+}
+
+/* The listening row: what to press, and a pad for the mouse. */
+.capture,
+.bind-conflict {
+  display: grid;
+  gap: 12px;
+  padding: 4px 10px 14px;
+  animation: page-in var(--t-settle) var(--ease-out) both;
+}
+.capture-prompt {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 28px;
   color: var(--brass);
   font-size: var(--text-sm);
   font-weight: 560;
 }
-.bind-add {
-  justify-self: end;
+.capture-pad {
+  display: grid;
+  place-items: center;
+  min-height: 64px;
+  padding: 12px;
+  border: 1px dashed oklch(0.752 0.118 82 / 0.5);
+  border-radius: var(--r-md);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  text-align: center;
+  cursor: crosshair;
+  user-select: none;
 }
-#settings-controls > .settings-section-body > .btn {
+.capture-pad:hover {
+  background: oklch(0.752 0.118 82 / 0.06);
+  color: var(--cream);
+}
+.bind-conflict p {
+  font-size: var(--text-sm);
+}
+.bind-conflict strong {
+  color: var(--brass);
+}
+
+.bind-reset {
+  display: grid;
+  gap: 10px;
   margin-top: 18px;
+  justify-items: start;
+}
+.bind-reset p {
+  color: var(--muted);
+  font-size: var(--text-sm);
 }
 
 /* ---- about ---- */

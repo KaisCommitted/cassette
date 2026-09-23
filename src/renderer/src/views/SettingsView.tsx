@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useState, type RefObject } from 'react'
+import { useEffect, useState, type RefObject } from 'react'
 import {
-  ACTIONS,
   type BundledKeyAvailability,
   type KeyBindings,
   type Library,
@@ -10,7 +9,7 @@ import {
 } from '@shared/types'
 import { SubtitleSettings } from '../components/SubtitleSettings'
 import { DraftInput, Section, SwitchRow } from '../components/SettingsParts'
-import { describeCaptured, humaniseDescriptor } from '../inputDescriptors'
+import { ControlsSection } from '../components/ControlsSection'
 import { Icon, Logo } from '../../shared/Icon'
 import { formatAgo } from '../select'
 
@@ -21,6 +20,7 @@ export interface SettingsViewProps {
   onRescan: () => void
   onCancelScan: () => void
   onAssign: (descriptor: string, actionId: string) => void
+  onUnassign: (descriptor: string) => void
   onResetBindings: () => void
   onChangeSettings: (changes: Partial<Settings>) => void
   scanning: boolean
@@ -172,6 +172,7 @@ export function SettingsView(props: SettingsViewProps) {
           <ControlsSection
             bindings={props.bindings}
             onAssign={props.onAssign}
+            onUnassign={props.onUnassign}
             onReset={props.onResetBindings}
           />
 
@@ -390,154 +391,4 @@ function clampMinutes(value: string): number {
   const minutes = Number(value)
   if (!Number.isFinite(minutes)) return 0
   return Math.max(0, Math.min(120, Math.round(minutes)))
-}
-
-// ---------------------------------------------------------------------------
-
-function ControlsSection({
-  bindings,
-  onAssign,
-  onReset
-}: {
-  bindings: KeyBindings
-  onAssign: (descriptor: string, actionId: string) => void
-  onReset: () => void
-}) {
-  const [listening, setListening] = useState<string | null>(null)
-
-  const descriptorsFor = useCallback(
-    (actionId: string) =>
-      Object.entries(bindings)
-        .filter(([, id]) => id === actionId)
-        .map(([descriptor]) => descriptor),
-    [bindings]
-  )
-
-  // While listening, every key and button press is a candidate binding, so the
-  // capture has to sit above the app's own handling rather than beside it.
-  useEffect(() => {
-    if (!listening) return
-
-    const finish = (descriptor: string | null): void => {
-      if (descriptor) onAssign(descriptor, listening)
-      setListening(null)
-    }
-
-    const onKey = (e: KeyboardEvent): void => {
-      e.preventDefault()
-      e.stopPropagation()
-      if (e.key === 'Escape') return finish(null)
-      if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return
-      finish(describeCaptured({ type: 'key', event: e }))
-    }
-    const onMouse = (e: MouseEvent): void => {
-      e.preventDefault()
-      e.stopPropagation()
-      swallowNextClick()
-      // Pressing the row's own Cancel button cancels, rather than binding
-      // the left button to the action by accident.
-      if ((e.target as HTMLElement | null)?.closest('[data-capture-cancel]')) return finish(null)
-      finish(describeCaptured({ type: 'mouse', event: e }))
-    }
-    const onWheel = (e: WheelEvent): void => {
-      e.preventDefault()
-      finish(describeCaptured({ type: 'wheel', event: e }))
-    }
-    window.addEventListener('keydown', onKey, true)
-    window.addEventListener('mousedown', onMouse, true)
-    window.addEventListener('wheel', onWheel, { capture: true, passive: false })
-    window.addEventListener('contextmenu', preventDefault, true)
-    return () => {
-      window.removeEventListener('keydown', onKey, true)
-      window.removeEventListener('mousedown', onMouse, true)
-      window.removeEventListener('wheel', onWheel, true)
-      window.removeEventListener('contextmenu', preventDefault, true)
-    }
-  }, [listening, onAssign])
-
-  const groups = [...new Set(ACTIONS.map((a) => a.group))]
-
-  return (
-    <Section id="controls" title="Controls">
-      <p className="section-intro">
-        VLC's keys by default. Press Add, then any key, mouse button or wheel direction to
-        bind it too — side buttons work. Escape leaves it unchanged. A key already used
-        elsewhere moves to the new action.
-      </p>
-
-      {groups.map((group) => (
-        <div className="bind-group" key={group}>
-          <h3 className="bind-group-title">{group}</h3>
-          <ul className="bind-list">
-            {ACTIONS.filter((a) => a.group === group).map((action) => {
-              const descriptors = descriptorsFor(action.id)
-              const isListening = listening === action.id
-              return (
-                <li className={isListening ? 'bind-row is-listening' : 'bind-row'} key={action.id}>
-                  <span className="bind-action">{action.label}</span>
-                  <span className="bind-keys">
-                    {isListening ? (
-                      <span className="bind-prompt" role="status">
-                        Press a key or mouse button…
-                      </span>
-                    ) : descriptors.length > 0 ? (
-                      descriptors.map((d) => (
-                        <kbd className="keycap" key={d}>
-                          {humaniseDescriptor(d)}
-                        </kbd>
-                      ))
-                    ) : (
-                      <span className="bind-none">Not bound</span>
-                    )}
-                  </span>
-                  <button
-                    className="btn btn-quiet btn-sm bind-add"
-                    data-capture-cancel={isListening ? '' : undefined}
-                    aria-label={isListening ? 'Cancel' : `Add a binding for ${action.label}`}
-                    onClick={() => setListening(isListening ? null : action.id)}
-                  >
-                    {isListening ? (
-                      'Cancel'
-                    ) : (
-                      <>
-                        <Icon name="plus" />
-                        Add
-                      </>
-                    )}
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-        </div>
-      ))}
-
-      <button className="btn btn-ghost" onClick={onReset}>
-        <Icon name="rescan" />
-        Restore VLC defaults
-      </button>
-    </Section>
-  )
-}
-
-function preventDefault(e: Event): void {
-  e.preventDefault()
-}
-
-/**
- * The press that was just captured as a binding also produces a click when the
- * button comes up. Left alone it would press whatever is under the pointer —
- * the Add button itself, which would start listening all over again.
- */
-function swallowNextClick(): void {
-  const swallow = (e: Event): void => {
-    e.preventDefault()
-    e.stopPropagation()
-  }
-  window.addEventListener('click', swallow, { capture: true, once: true })
-  window.addEventListener(
-    'mouseup',
-    () => setTimeout(() => window.removeEventListener('click', swallow, true), 0),
-    { capture: true, once: true }
-  )
 }

@@ -1,5 +1,16 @@
 import { DEFAULT_BINDINGS, type KeyBindings } from '@shared/types'
+import { canonicalDescriptor } from '@shared/keys'
 import { readJson, writeJsonAtomic } from '../state/atomicJson'
+
+/**
+ * What the file records for a default the user took away.
+ *
+ * Defaults are merged underneath the saved file on every load, so that a
+ * binding added in a later version reaches people who already have a file.
+ * Simply deleting a default would therefore bring it straight back on the
+ * next launch; an explicit empty entry is what keeps it gone.
+ */
+const UNBOUND = ''
 
 /**
  * The user's bindings, defaults merged underneath.
@@ -17,15 +28,18 @@ export class BindingsStore {
     const saved = await readJson<KeyBindings | null>(this.file, null)
     // Defaults fill any gap, so a binding added in a later version still
     // works for someone who already has a saved file.
-    this.bindings = saved ? { ...DEFAULT_BINDINGS, ...saved } : { ...DEFAULT_BINDINGS }
+    this.bindings = { ...DEFAULT_BINDINGS, ...normalise(saved ?? {}) }
   }
 
+  /** Every live binding; unbound defaults are left out. */
   all(): KeyBindings {
-    return { ...this.bindings }
+    return Object.fromEntries(
+      Object.entries(this.bindings).filter(([, action]) => action !== UNBOUND)
+    )
   }
 
   resolve(descriptor: string): string | null {
-    return this.bindings[descriptor] ?? null
+    return this.bindings[canonicalDescriptor(descriptor)] || null
   }
 
   descriptorsFor(actionId: string): string[] {
@@ -36,14 +50,16 @@ export class BindingsStore {
 
   /** Binds a descriptor, taking it from whatever action previously held it. */
   async assign(descriptor: string, actionId: string): Promise<KeyBindings> {
-    this.bindings = { ...this.bindings, [descriptor]: actionId }
+    this.bindings = { ...this.bindings, [canonicalDescriptor(descriptor)]: actionId }
     await this.save()
     return this.all()
   }
 
   async unassign(descriptor: string): Promise<KeyBindings> {
+    const key = canonicalDescriptor(descriptor)
     const next = { ...this.bindings }
-    delete next[descriptor]
+    if (key in DEFAULT_BINDINGS) next[key] = UNBOUND
+    else delete next[key]
     this.bindings = next
     await this.save()
     return this.all()
@@ -58,4 +74,18 @@ export class BindingsStore {
   private async save(): Promise<void> {
     await writeJsonAtomic(this.file, this.bindings)
   }
+}
+
+/**
+ * Brings an older file up to the one spelling of each key.
+ *
+ * Files saved before keys were canonicalised can hold `key:ArrowLeft` next to
+ * `key:Left`; they are the same key, so they collapse into one entry.
+ */
+function normalise(saved: KeyBindings): KeyBindings {
+  const out: KeyBindings = {}
+  for (const [descriptor, action] of Object.entries(saved)) {
+    out[canonicalDescriptor(descriptor)] = action
+  }
+  return out
 }
