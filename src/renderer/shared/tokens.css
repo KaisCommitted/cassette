@@ -1,0 +1,126 @@
+/*
+ * Cassette's type, colour and motion, shared by the library window and the
+ * player overlay.
+ *
+ * The palette is a home-video shelf: warm ink rather than a cold near-black,
+ * cream for text, brass for the one thing you are meant to press, oxide for
+ * the sleeves of tapes with no artwork. Everything else is a tint of those.
+ */
+
+/* Both families are bundled: nothing here is fetched at runtime. */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-display: block;
+  font-weight: 300 700;
+  src: url('./fonts/space-grotesk-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-display: block;
+  font-weight: 300 700;
+  src: url('./fonts/space-grotesk-latin-ext-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+    U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0,
+    U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-display: block;
+  font-weight: 100 1000;
+  src: url('./fonts/dm-sans-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-display: block;
+  font-weight: 100 1000;
+  src: url('./fonts/dm-sans-latin-ext-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+    U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0,
+    U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+:root {
+  color-scheme: dark;
+
+  /* ---- colour ---- */
+  --ink: oklch(0.205 0.004 85);
+  --ink-deep: oklch(0.17 0.004 85);
+  --panel: oklch(0.245 0.007 70);
+  --raised: oklch(0.3 0.009 70);
+  --raised-hi: oklch(0.34 0.01 70);
+  --cream: oklch(0.906 0.02 80);
+  --muted: oklch(0.72 0.02 75);
+  --faint: oklch(0.58 0.016 75);
+  --line: oklch(0.906 0.02 80 / 0.12);
+  --line-strong: oklch(0.906 0.02 80 / 0.22);
+  --brass: oklch(0.752 0.118 82);
+  --brass-hi: oklch(0.8 0.12 84);
+  --brass-soft: oklch(0.752 0.118 82 / 0.14);
+  --oxide: oklch(0.501 0.105 29);
+  --ok: oklch(0.74 0.11 150);
+  --bad: oklch(0.68 0.15 32);
+
+  /* ---- type ---- */
+  --font-display: 'Space Grotesk', 'Segoe UI Variable Display', system-ui, sans-serif;
+  --font-body: 'DM Sans', 'Segoe UI Variable Text', system-ui, sans-serif;
+
+  /* A modular scale on 14px, stepping by roughly a fourth. */
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 26px;
+  --text-3xl: clamp(30px, 2.4vw + 10px, 44px);
+  --text-4xl: clamp(36px, 3.2vw + 12px, 60px);
+
+  /* ---- shape ---- */
+  /* Three radii, by size of thing: keycaps and chips, controls and tiles, panels. */
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+
+  /* ---- motion ---- */
+  /* Quick, and only in answer to something you did. */
+  --t-quick: 120ms;
+  --t-settle: 180ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* ---- focus ---- */
+  --focus: 0 0 0 2px var(--ink), 0 0 0 4px var(--brass);
+}
+
+/* ---- shared primitives ---- */
+
+.icon {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+}
+.icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.logo {
+  display: inline-block;
+  flex: none;
+}
+.logo svg {
+  height: 100%;
+  width: auto;
+  display: block;
+}

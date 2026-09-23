@@ -1,155 +1,115 @@
-// Draws the Cassette app icon straight to build/icon.png.
+// Draws the Cassette app icon from the interface's own SVG mark.
 //
-// Rasterised here rather than converted from the SVG so the build needs no
-// image toolchain: the mark is only rectangles and circles, and Node ships
-// both the deflate and the CRC needed to write a PNG.
+// The mark lives in src/renderer/shared/icons: app.svg for everything from
+// 32px up, and app-16.svg, drawn with a heavier stroke, for the two sizes
+// where a 1.6 stroke would dissolve. Chromium does the rasterising, so the
+// icon is exactly the SVG and the build needs no image toolchain beyond the
+// Electron it already has.
 //
-// Run: node scripts/render-icon.cjs [size]
+// Writes build/icon.png (512), build/icon.ico (16–256) and build/logo.svg.
+//
+// Run: npx electron scripts/render-icon.cjs
 
-const { deflateSync, crc32 } = require('node:zlib')
-const { writeFileSync, mkdirSync } = require('node:fs')
+const { app, BrowserWindow } = require('electron')
+const { readFileSync, writeFileSync } = require('node:fs')
 const { join } = require('node:path')
 
-const SIZE = Number(process.argv[2] ?? 512)
-const S = SIZE / 512 // everything below is authored at 512
+const root = join(__dirname, '..')
+const icons = join(root, 'src', 'renderer', 'shared', 'icons')
 
-const INK = [0x12, 0x15, 0x1a]
-const SHELL = [0x1b, 0x20, 0x27]
-const EDGE = [0x2c, 0x34, 0x3e]
-const LABEL = [0x23, 0x2b, 0x34]
-const LABEL_LINE = [0x39, 0x43, 0x4f]
-const WINDOW = [0x0c, 0x0f, 0x13]
-const LAMP = [0xe8, 0xa3, 0x3d]
-const TAPE = [0x6a, 0x4c, 0x1e]
+// The interface's ink and brass, as hex because the .ico and the README
+// outlive any stylesheet.
+const INK = '#1c1a17'
+const EDGE = '#3a352e'
+const BRASS = '#d9a441'
 
-const canvas = Buffer.alloc(SIZE * SIZE * 4)
-
-function blend(x, y, colour, alpha) {
-  if (x < 0 || y < 0 || x >= SIZE || y >= SIZE || alpha <= 0) return
-  const i = (y * SIZE + x) * 4
-  const a = Math.min(1, alpha)
-  for (let c = 0; c < 3; c++) {
-    canvas[i + c] = Math.round(canvas[i + c] * (1 - a) + colour[c] * a)
-  }
-  canvas[i + 3] = Math.round(canvas[i + 3] * (1 - a) + 255 * a)
+/** The glyph's inner markup, without its own <svg> wrapper. */
+function glyph(file) {
+  const svg = readFileSync(join(icons, file), 'utf8')
+  return svg.match(/<svg[^>]*>([\s\S]*)<\/svg>/)[1].trim()
 }
 
-/** Signed distance to a rounded rectangle, for cheap antialiasing. */
-function roundedRectDistance(px, py, x, y, w, h, r) {
-  const cx = Math.abs(px - (x + w / 2)) - (w / 2 - r)
-  const cy = Math.abs(py - (y + h / 2)) - (h / 2 - r)
-  const dx = Math.max(cx, 0)
-  const dy = Math.max(cy, 0)
-  return Math.min(Math.max(cx, cy), 0) + Math.sqrt(dx * dx + dy * dy) - r
+/**
+ * The icon at one size, as an SVG document.
+ *
+ * Small sizes give the glyph more of the tile: at 16px every pixel of stroke
+ * counts, and a generous margin leaves nothing legible.
+ */
+function iconSvg(size) {
+  const small = size <= 24
+  const inner = glyph(small ? 'app-16.svg' : 'app.svg')
+  const stroke = small ? 2 : 1.6
+  // The tile, then the glyph scaled into it. 24 is the glyph's viewBox.
+  const margin = small ? 0.02 : 0.14
+  const scale = (1 - margin * 2) / 24
+  const radius = small ? 0.18 : 0.22
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1" width="${size}" height="${size}">
+  <rect x="0" y="0" width="1" height="1" rx="${radius}" fill="${INK}"/>
+  ${small ? '' : `<rect x="0.006" y="0.006" width="0.988" height="0.988" rx="${radius - 0.006}" fill="none" stroke="${EDGE}" stroke-width="0.012"/>`}
+  <g transform="translate(${margin} ${margin}) scale(${scale})" fill="none" stroke="${BRASS}"
+     stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round">${inner}</g>
+</svg>`
 }
 
-function fillRoundedRect(x, y, w, h, r, colour) {
-  for (let py = Math.floor(y - 2); py < Math.ceil(y + h + 2); py++) {
-    for (let px = Math.floor(x - 2); px < Math.ceil(x + w + 2); px++) {
-      const d = roundedRectDistance(px + 0.5, py + 0.5, x, y, w, h, r)
-      blend(px, py, colour, Math.min(1, 0.5 - d))
-    }
-  }
+async function rasterise(window, size) {
+  const html = `<body style="margin:0;background:transparent">${iconSvg(size)}</body>`
+  await window.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html))
+  // An offscreen window paints on its own schedule; capturing before the
+  // first frame waits forever.
+  await new Promise((resolve) => setTimeout(resolve, 300))
+  const image = await window.webContents.capturePage({ x: 0, y: 0, width: size, height: size })
+  return image.resize({ width: size, height: size }).toPNG()
 }
 
-function strokeRoundedRect(x, y, w, h, r, colour, width) {
-  for (let py = Math.floor(y - width - 2); py < Math.ceil(y + h + width + 2); py++) {
-    for (let px = Math.floor(x - width - 2); px < Math.ceil(x + w + width + 2); px++) {
-      const d = Math.abs(roundedRectDistance(px + 0.5, py + 0.5, x, y, w, h, r))
-      blend(px, py, colour, Math.min(1, width / 2 - d + 0.5))
-    }
-  }
+/** An .ico whose entries are PNGs, which Windows has read since Vista. */
+function ico(entries) {
+  const header = Buffer.alloc(6)
+  header.writeUInt16LE(0, 0)
+  header.writeUInt16LE(1, 2)
+  header.writeUInt16LE(entries.length, 4)
+  const directory = Buffer.alloc(16 * entries.length)
+  let offset = 6 + directory.length
+  entries.forEach(({ size, png }, i) => {
+    const at = i * 16
+    directory.writeUInt8(size >= 256 ? 0 : size, at)
+    directory.writeUInt8(size >= 256 ? 0 : size, at + 1)
+    directory.writeUInt16LE(1, at + 4) // colour planes
+    directory.writeUInt16LE(32, at + 6) // bits per pixel
+    directory.writeUInt32LE(png.length, at + 8)
+    directory.writeUInt32LE(offset, at + 12)
+    offset += png.length
+  })
+  return Buffer.concat([header, directory, ...entries.map((e) => e.png)])
 }
 
-function fillCircle(cx, cy, radius, colour, opacity = 1) {
-  for (let py = Math.floor(cy - radius - 2); py < Math.ceil(cy + radius + 2); py++) {
-    for (let px = Math.floor(cx - radius - 2); px < Math.ceil(cx + radius + 2); px++) {
-      const d = Math.hypot(px + 0.5 - cx, py + 0.5 - cy) - radius
-      blend(px, py, colour, Math.min(1, 0.5 - d) * opacity)
-    }
-  }
-}
+app.whenReady().then(async () => {
+  const window = new BrowserWindow({
+    show: false,
+    width: 512,
+    height: 512,
+    transparent: true,
+    frame: false,
+    webPreferences: { offscreen: true }
+  })
+  // Offscreen rendering at a device scale of 1, so a 16px icon is 16 pixels.
+  window.webContents.setZoomFactor(1)
 
-function strokeCircle(cx, cy, radius, colour, width) {
-  for (let py = Math.floor(cy - radius - width - 2); py < Math.ceil(cy + radius + width + 2); py++) {
-    for (let px = Math.floor(cx - radius - width - 2); px < Math.ceil(cx + radius + width + 2); px++) {
-      const d = Math.abs(Math.hypot(px + 0.5 - cx, py + 0.5 - cy) - radius)
-      blend(px, py, colour, Math.min(1, width / 2 - d + 0.5))
-    }
-  }
-}
+  const sizes = [16, 24, 32, 48, 64, 128, 256]
+  const entries = []
+  for (const size of sizes) entries.push({ size, png: await rasterise(window, size) })
 
-const s = (n) => n * S
-
-// Backdrop
-fillRoundedRect(0, 0, SIZE, SIZE, s(112), INK)
-
-// Shell
-fillRoundedRect(s(72), s(136), s(368), s(240), s(26), SHELL)
-strokeRoundedRect(s(72), s(136), s(368), s(240), s(26), EDGE, s(6))
-
-// Label band
-fillRoundedRect(s(104), s(166), s(304), s(104), s(12), LABEL)
-fillRoundedRect(s(124), s(192), s(180), s(9), s(4.5), LABEL_LINE)
-fillRoundedRect(s(124), s(218), s(116), s(9), s(4.5), LABEL_LINE)
-
-// Window
-fillRoundedRect(s(146), s(286), s(220), s(62), s(14), WINDOW)
-strokeRoundedRect(s(146), s(286), s(220), s(62), s(14), EDGE, s(5))
-
-// Tape spanning the spools
-fillRoundedRect(s(219), s(311), s(74), s(12), 0, WINDOW)
-fillRoundedRect(s(219), s(313), s(74), s(4), s(2), TAPE)
-
-// Left spool, nearly unwound
-fillCircle(s(198), s(317), s(21), WINDOW)
-strokeCircle(s(198), s(317), s(21), LAMP, s(7))
-fillCircle(s(198), s(317), s(7), LAMP)
-
-// Right spool, wound full: the played-through side
-fillCircle(s(314), s(317), s(21), LAMP, 0.18)
-strokeCircle(s(314), s(317), s(21), LAMP, s(7))
-fillCircle(s(314), s(317), s(7), LAMP)
-
-// Drive holes
-fillCircle(s(122), s(317), s(10), WINDOW)
-strokeCircle(s(122), s(317), s(10), EDGE, s(4))
-fillCircle(s(390), s(317), s(10), WINDOW)
-strokeCircle(s(390), s(317), s(10), EDGE, s(4))
-
-// ---- PNG encoding ----
-
-function chunk(type, data) {
-  const length = Buffer.alloc(4)
-  length.writeUInt32BE(data.length)
-  const body = Buffer.concat([Buffer.from(type, 'ascii'), data])
-  const crc = Buffer.alloc(4)
-  crc.writeUInt32BE(crc32(body) >>> 0)
-  return Buffer.concat([length, body, crc])
-}
-
-const ihdr = Buffer.alloc(13)
-ihdr.writeUInt32BE(SIZE, 0)
-ihdr.writeUInt32BE(SIZE, 4)
-ihdr[8] = 8 // bit depth
-ihdr[9] = 6 // RGBA
-// 10-12 stay zero: deflate, adaptive filtering, no interlace
-
-// One filter byte per scanline; filter 0 keeps the encoder trivial.
-const raw = Buffer.alloc(SIZE * (SIZE * 4 + 1))
-for (let y = 0; y < SIZE; y++) {
-  raw[y * (SIZE * 4 + 1)] = 0
-  canvas.copy(raw, y * (SIZE * 4 + 1) + 1, y * SIZE * 4, (y + 1) * SIZE * 4)
-}
-
-const png = Buffer.concat([
-  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-  chunk('IHDR', ihdr),
-  chunk('IDAT', deflateSync(raw, { level: 9 })),
-  chunk('IEND', Buffer.alloc(0))
-])
-
-mkdirSync(join(process.cwd(), 'build'), { recursive: true })
-const out = join(process.cwd(), 'build', SIZE === 512 ? 'icon.png' : `icon-${SIZE}.png`)
-writeFileSync(out, png)
-console.log(`wrote ${out} (${SIZE}x${SIZE}, ${(png.length / 1024).toFixed(1)} KB)`)
+  const build = join(root, 'build')
+  writeFileSync(join(build, 'icon.ico'), ico(entries))
+  writeFileSync(join(build, 'icon.png'), await rasterise(window, 512))
+  writeFileSync(
+    join(build, 'logo.svg'),
+    `<!--
+  Cassette — app mark. Generated by scripts/render-icon.cjs from
+  src/renderer/shared/icons/app.svg; edit that, not this.
+-->
+${iconSvg(512)}
+`
+  )
+  console.log(`wrote build/icon.ico (${sizes.join(', ')}), build/icon.png, build/logo.svg`)
+  app.quit()
+})
