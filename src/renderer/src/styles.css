@@ -940,12 +940,11 @@ button {
  * visible at all and is not optional, so it pays far more for full-window
  * effects than a normal Electron app would.
  *
- * The suspicion is that this is what delays the cursor while the pointer is
- * moving: a renderer busy compositing the whole viewport answers "which
- * cursor" late, and Windows falls back to the arrow until it hears otherwise.
- * That is a hypothesis, not a demonstrated cause — but the effect cost real
- * work on every frame at an opacity of 0.035, which is barely visible, so it
- * is not worth keeping either way.
+ * They were removed while chasing a cursor flicker, on the theory that the
+ * repaint cost delayed the cursor. That theory was wrong — the flicker came
+ * from mouse forwarding on the overlay window (see overlayWindow.ts). They
+ * stay gone anyway: they cost real work on every frame at an opacity of
+ * 0.035, which is barely visible.
  */
 
 

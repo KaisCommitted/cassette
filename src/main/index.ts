@@ -120,6 +120,23 @@ process.on('unhandledRejection', (reason) => {
   console.error('[cassette] unhandled rejection:', reason)
 })
 
+/**
+ * The same again for exceptions that arrive outside a promise.
+ *
+ * The rejection net above does not catch these, and at least one real failure
+ * takes this route: if mpv cannot be started — the file missing, or an
+ * anti-virus holding it — the spawn reports it by emitting an error event, and
+ * an error event with no listener is rethrown at the top of the process. That
+ * ends the app during startup, before there is a window to say anything in, so
+ * launching Cassette appears to do nothing at all.
+ *
+ * Losing playback is bad; losing the whole library because playback could not
+ * start is worse. Everything else here keeps working without mpv.
+ */
+process.on('uncaughtException', (error) => {
+  console.error('[cassette] uncaught exception:', error)
+})
+
 // Custom schemes must be declared before the app is ready.
 registerCustomSchemes()
 

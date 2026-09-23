@@ -334,7 +334,7 @@ export function registerHandlers(ctx: AppContext): void {
   // controls and must not pay for a round trip.
   ipcMain.on(IPC.setOverlayInteractive, (_e, interactive: boolean) => {
     if (ctx.overlayWindow.isDestroyed()) return
-    ctx.overlayWindow.setIgnoreMouseEvents(!interactive, { forward: true })
+    ctx.overlayWindow.setIgnoreMouseEvents(!interactive)
   })
 }
 

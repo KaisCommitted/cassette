@@ -31,7 +31,8 @@ export function createOverlayInteraction(
   const setInteractive = (next: boolean): void => {
     if (next === interactive || overlay.isDestroyed()) return
     interactive = next
-    overlay.setIgnoreMouseEvents(!next, { forward: true })
+    // No forwarding: see createOverlayWindow for why it is not harmless.
+    overlay.setIgnoreMouseEvents(!next)
   }
 
   const tick = (): void => {

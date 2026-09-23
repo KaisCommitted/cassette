@@ -22,6 +22,12 @@ export function createVideoWindow(parent: BrowserWindow): BrowserWindow {
     movable: false,
     focusable: false,
     skipTaskbar: true,
+    // Keeps it out of Alt-Tab. `skipTaskbar` only removes the taskbar button —
+    // it leaves the window switchable, so holding Alt during an episode listed
+    // this and the overlay as if they were separate copies of Cassette. On
+    // Windows this option is what sets WS_EX_TOOLWINDOW, which is the flag the
+    // switcher actually looks at.
+    type: 'toolbar',
     hasShadow: false,
     backgroundColor: '#000000',
     webPreferences: {
