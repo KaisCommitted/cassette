@@ -1,6 +1,6 @@
 # Redesign review
 
-What was kept from the Lovable prototype, what changed, and why. The
+What was kept from the prototype, what changed, and why. The
 prototype was a sketch on mock data; the decisions below come from putting
 real libraries through it — the one on this machine, and a generated one of
 640 films and 37 series with no artwork at all.
