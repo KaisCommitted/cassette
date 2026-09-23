@@ -100,4 +100,25 @@ describe('MpvIpc', () => {
     sock.push('{"error":"success","data":1,"request_id":1}\n')
     expect(await pending).toBe(1)
   })
+
+  it('fails pending and later commands at once when the connection drops', async () => {
+    const { sock } = fakeSocket()
+    const ipc = new MpvIpc(sock)
+    const pending = ipc.command(['get_property', 'x'])
+    const settled = pending.catch((e: Error) => e.message)
+    sock.destroy()
+    expect(await settled).toMatch(/gone/)
+    // Not another five-second wait per command: mpv is known to be gone.
+    await expect(ipc.command(['seek', 10, 'relative'])).rejects.toThrow(/gone/)
+  })
+
+  it('says when the connection has closed', async () => {
+    const { sock } = fakeSocket()
+    const ipc = new MpvIpc(sock)
+    const closed = vi.fn()
+    ipc.on('close', closed)
+    sock.destroy()
+    await new Promise((r) => setImmediate(r))
+    expect(closed).toHaveBeenCalledTimes(1)
+  })
 })

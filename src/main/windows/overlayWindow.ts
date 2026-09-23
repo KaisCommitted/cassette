@@ -1,7 +1,7 @@
 import { BrowserWindow } from 'electron'
 import { rendererUrl } from '../appProtocol'
 import { preloadPath } from './preloadPath'
-import { followBounds } from './followBounds'
+import type { PlayerViewport } from './playerViewport'
 
 /**
  * A transparent window above the video window that draws the on-screen
@@ -32,10 +32,7 @@ import { followBounds } from './followBounds'
  * Clicking it therefore moves focus to it, which is why the main process
  * listens for key bindings on this window as well as on the main one.
  */
-export function createOverlayWindow(
-  main: BrowserWindow,
-  video: BrowserWindow
-): BrowserWindow {
+export function createOverlayWindow(video: BrowserWindow, viewport: PlayerViewport): BrowserWindow {
   const overlay = new BrowserWindow({
     parent: video,
     show: false,
@@ -91,8 +88,8 @@ export function createOverlayWindow(
     void overlay.loadURL(rendererUrl('overlay.html'))
   }
 
-  // Its position still comes from the main window's content area, like the
-  // video window's; only the stacking comes from the video.
-  followBounds(main, overlay)
+  // Its position comes from the player viewport, like the video window's;
+  // only the stacking comes from the video.
+  viewport.follow(overlay)
   return overlay
 }

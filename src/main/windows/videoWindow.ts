@@ -1,5 +1,5 @@
 import { BrowserWindow } from 'electron'
-import { followBounds } from './followBounds'
+import type { PlayerViewport } from './playerViewport'
 
 /**
  * A bare window that exists purely to give mpv an HWND to render into.
@@ -13,7 +13,7 @@ import { followBounds } from './followBounds'
  *
  * It never loads app content; mpv paints over every pixel.
  */
-export function createVideoWindow(parent: BrowserWindow): BrowserWindow {
+export function createVideoWindow(parent: BrowserWindow, viewport: PlayerViewport): BrowserWindow {
   const win = new BrowserWindow({
     parent,
     show: false,
@@ -42,6 +42,6 @@ export function createVideoWindow(parent: BrowserWindow): BrowserWindow {
     'data:text/html,' + encodeURIComponent('<body style="margin:0;background:#000"></body>')
   )
 
-  followBounds(parent, win)
+  viewport.follow(win)
   return win
 }

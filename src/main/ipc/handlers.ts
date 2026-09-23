@@ -20,6 +20,7 @@ import type { SettingsStore } from '../state/settingsStore'
 import type { SubtitleChoiceStore } from '../state/subtitleChoiceStore'
 import type { MpvController } from '../mpv/mpvController'
 import type { OverlayInteraction } from '../windows/overlayInteraction'
+import type { PlayerViewport } from '../windows/playerViewport'
 import type { BindingsStore } from '../input/bindingsStore'
 import type { MetadataStore } from '../tmdb/metadataStore'
 import { TmdbClient } from '../tmdb/tmdbClient'
@@ -32,6 +33,8 @@ export interface AppContext {
   videoWindow: BrowserWindow
   overlayWindow: BrowserWindow
   overlayInteraction: OverlayInteraction
+  /** Where the two player windows sit, and whether that is the whole display. */
+  viewport: PlayerViewport
   bindings: BindingsStore
   metadata: MetadataStore
   subtitleChoices: SubtitleChoiceStore
@@ -69,11 +72,17 @@ export async function playItem(
     ctx.library ? findPrevious(ctx.library, item.key) !== null : false,
     ctx.library ? findNext(ctx.library, item.key) !== null : false
   )
+  // The two windows were hidden, and hidden windows follow nothing; put them
+  // where the player is before they show.
+  ctx.viewport.sync()
   ctx.videoWindow.show()
   ctx.overlayWindow.show()
   ctx.overlayInteraction.start()
-  // The main window keeps keyboard focus; the other two are non-focusable.
-  ctx.mainWindow.focus()
+  // Keyboard focus goes to the library window, or, in fullscreen, to the
+  // controls: Windows drops the taskbar behind the active window only if that
+  // window covers the display, and the library window no longer does.
+  if (ctx.viewport.isFullscreen) ctx.overlayWindow.focus()
+  else ctx.mainWindow.focus()
   await ctx.mpv.load(item.path, resumeAt, item.label)
 }
 
@@ -102,7 +111,13 @@ async function closePlayer(ctx: AppContext): Promise<void> {
     ctx.overlayWindow.webContents.send(IPC.screenTransition, 'out')
     await wait(CLOSE_DIP_MS)
   }
-  await ctx.mpv.stop()
+  // Whatever mpv does — answers late, or has gone — the player comes down.
+  // Throwing here used to leave both windows up over a dipped-black picture.
+  try {
+    await ctx.mpv.stop()
+  } catch (error) {
+    console.error('[cassette] mpv did not stop cleanly:', (error as Error).message)
+  }
   ctx.endSleep()
   ctx.currentKey = null
   ctx.overlayInteraction.stop()
@@ -113,21 +128,17 @@ async function closePlayer(ctx: AppContext): Promise<void> {
   ctx.videoWindow.hide()
   if (controlsHadFocus && !ctx.mainWindow.isDestroyed()) ctx.mainWindow.focus()
 
-  // Fullscreen belongs to the player, not the library. Closing an episode
-  // while fullscreen used to leave the window that way, which was wrong on its
-  // own and also left the screen black: the two windows covering the library
-  // had just been hidden, and on this compositing path nothing repaints what
-  // they were covering. The next thing to disturb the window — switching away
-  // and back — brought the picture back, which is what made it look like an
-  // alt-tab problem.
-  if (ctx.mainWindow.isFullScreen()) {
-    ctx.mainWindow.setFullScreen(false)
+  // Fullscreen belongs to the player, not the library. Only the two player
+  // windows were covering the display, and they have just been hidden, so
+  // there is nothing to restore but the record of it.
+  if (ctx.viewport.isFullscreen) {
+    ctx.viewport.setFullscreen(false)
     ctx.mpv.setFullscreen(false)
   }
 
-  // Ask for a repaint regardless. Leaving fullscreen resizes the window, which
-  // forces one by itself, but closing a windowed player does not — and the
-  // same stale area can be left behind there.
+  // Ask for a repaint: on this compositing path nothing repaints what the two
+  // windows were covering, and the library used to come back black until the
+  // next thing disturbed it.
   if (!ctx.mainWindow.isDestroyed()) ctx.mainWindow.webContents.invalidate()
 
   await ctx.progress.save()
@@ -170,22 +181,19 @@ let switchingScreen = false
 /**
  * Goes in or out of fullscreen behind a quick dip to black.
  *
- * Fullscreen is the operating system resizing the window at once, and mpv
+ * Fullscreen is the two player windows growing to cover the display at once
+ * (the library window stays as it is; see PlayerViewport for why), and mpv
  * scales its picture a moment later, so the switch itself shows as a jump
  * with a frame or two of the old size stretched across the new one. The
  * overlay covers the picture for that moment and fades it back in, which is
- * what makes it read as one movement rather than a glitch. Outside the player
- * there is no picture to cover, so it is a plain switch.
+ * what makes it read as one movement rather than a glitch.
  */
 export async function toggleFullscreen(ctx: AppContext): Promise<void> {
   if (switchingScreen) return
-  const next = !ctx.mainWindow.isFullScreen()
-  const apply = (): void => {
-    ctx.mainWindow.setFullScreen(next)
-    ctx.mpv.setFullscreen(next)
-  }
+  // Fullscreen belongs to the player; with it closed there is nothing to grow.
   const playing = Boolean(ctx.mpv.getState().path) && ctx.overlayWindow.isVisible()
-  if (!playing) return apply()
+  if (!playing) return
+  const next = !ctx.viewport.isFullscreen
 
   switchingScreen = true
   const tell = (phase: 'out' | 'in'): void => {
@@ -194,16 +202,12 @@ export async function toggleFullscreen(ctx: AppContext): Promise<void> {
   try {
     tell('out')
     await wait(DIP_MS)
-    const settled = new Promise<void>((resolve) => {
-      // Two calls rather than a ternary: BrowserWindow.once is overloaded per
-      // event name, so a union of the two names matches neither overload.
-      if (next) ctx.mainWindow.once('enter-full-screen', () => resolve())
-      else ctx.mainWindow.once('leave-full-screen', () => resolve())
-    })
-    apply()
-    // The event is the OS saying it is done; a timeout keeps a missed one
-    // from leaving the picture covered.
-    await Promise.race([settled, wait(1200)])
+    ctx.viewport.setFullscreen(next)
+    ctx.mpv.setFullscreen(next)
+    // Windows drops the taskbar behind the active window only while that
+    // window covers the display. The library window does not, so the
+    // controls, which do, take focus; they answer the same keys.
+    if (next && !ctx.overlayWindow.isDestroyed()) ctx.overlayWindow.focus()
     await wait(SETTLE_MS)
   } finally {
     tell('in')

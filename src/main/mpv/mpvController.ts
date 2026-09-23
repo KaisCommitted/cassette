@@ -68,18 +68,47 @@ export class MpvController extends EventEmitter {
   private warmthApplied = -1
 
   async start(hwnd: Buffer, legacyCompositing = true): Promise<void> {
-    this.proc = await startMpv(hwnd, legacyCompositing)
-    this.ipc = new MpvIpc(this.proc.socket)
-    this.ipc.on('property', (name: string, value: unknown) => {
+    const proc = await startMpv(hwnd, legacyCompositing)
+    this.proc = proc
+    // The process ending is another way for the connection to go.
+    proc.child.on('exit', () => this.onGone())
+    await this.attach(new MpvIpc(proc.socket))
+  }
+
+  /**
+   * Drives mpv over a connection already made. Apart from start(), so tests
+   * can hand in a pipe of their own.
+   */
+  async attach(ipc: MpvIpc): Promise<void> {
+    this.ipc = ipc
+    this.gone = false
+    ipc.on('property', (name: string, value: unknown) => {
       this.onProperty(name, value)
     })
-    this.ipc.on('event', (event: string, msg: Record<string, unknown>) => {
+    ipc.on('event', (event: string, msg: Record<string, unknown>) => {
       // mpv reaching the end of a file is how auto-advance is triggered. The
       // reason says whether it really ran out ("eof") or was replaced or
       // stopped, which also ends the file.
       if (event === 'end-file') this.emit('end-file', msg['reason'] ?? null)
     })
-    for (const name of OBSERVED) await this.ipc.observeProperty(name)
+    ipc.on('close', () => this.onGone())
+    for (const name of OBSERVED) await ipc.observeProperty(name)
+  }
+
+  /** True once mpv has gone, or been let go, until another is attached. */
+  private gone = false
+
+  /**
+   * mpv has gone: crashed, been killed, or closed its pipe. Whatever is still
+   * queued fails straight away, and the session layer is told, so it can
+   * close the player and start another mpv. Said once per mpv.
+   */
+  private onGone(): void {
+    if (this.gone) return
+    this.gone = true
+    this.ipc = null
+    this.proc = null
+    this.emit('exit')
   }
 
   private onProperty(name: string, value: unknown): void {
@@ -125,7 +154,7 @@ export class MpvController extends EventEmitter {
   }
 
   private get required(): MpvIpc {
-    if (!this.ipc) throw new Error('mpv has not been started')
+    if (!this.ipc) throw new Error('mpv is not running')
     return this.ipc
   }
 
@@ -158,20 +187,29 @@ export class MpvController extends EventEmitter {
     return run
   }
 
-  /** Resolves when mpv reports the named event, or after `timeoutMs`. */
-  private waitForEvent(name: string, timeoutMs: number): Promise<boolean> {
+  /**
+   * Resolves when the file mpv was just asked for is ready, when mpv gives up
+   * on it, or after `timeoutMs`.
+   *
+   * Giving up is an `end-file` whose reason is `error`. The `end-file` for
+   * the file being replaced says `stop` and arrives first; it is not that.
+   */
+  private waitForLoad(timeoutMs: number): Promise<'loaded' | 'error' | 'timeout'> {
     const ipc = this.required
-    return new Promise<boolean>((resolve) => {
+    return new Promise((resolve) => {
       const timer = setTimeout(() => {
         ipc.off('event', onEvent)
-        resolve(false)
+        resolve('timeout')
       }, timeoutMs)
       timer.unref?.()
-      function onEvent(event: string): void {
-        if (event !== name) return
+      function onEvent(event: string, msg: Record<string, unknown>): void {
+        let outcome: 'loaded' | 'error' | null = null
+        if (event === 'file-loaded') outcome = 'loaded'
+        else if (event === 'end-file' && msg['reason'] === 'error') outcome = 'error'
+        if (!outcome) return
         clearTimeout(timer)
         ipc.off('event', onEvent)
-        resolve(true)
+        resolve(outcome)
       }
       ipc.on('event', onEvent)
     })
@@ -200,13 +238,25 @@ export class MpvController extends EventEmitter {
     }
     this.emit('state', this.getState())
 
-    const loaded = this.waitForEvent('file-loaded', 20000)
+    const loaded = this.waitForLoad(20000)
     await this.send(['loadfile', path, 'replace'])
-    await loaded
+    if ((await loaded) === 'error') {
+      // mpv could not open it. Forget the file at once, rather than leave the
+      // player waiting on a black screen for a picture that is not coming.
+      this.forgetFile()
+      throw new Error(`mpv could not open ${basename(path)}`)
+    }
     if (startSeconds > 0) {
       await this.send(['seek', startSeconds, 'absolute'])
     }
     this.state.loading = false
+    this.emit('state', this.getState())
+  }
+
+  /** Back to nothing playing, keeping only what belongs to the user. */
+  private forgetFile(): void {
+    const { volume, muted } = this.state
+    this.state = { ...emptyState(), volume, muted }
     this.emit('state', this.getState())
   }
 
@@ -414,11 +464,12 @@ export class MpvController extends EventEmitter {
   }
 
   async stop(): Promise<void> {
-    await this.send(['stop'])
-    const volume = this.state.volume
-    const muted = this.state.muted
-    this.state = { ...emptyState(), volume, muted }
-    this.emit('state', this.getState())
+    try {
+      await this.send(['stop'])
+    } finally {
+      // Whether or not mpv answered — it may be gone — the session is over.
+      this.forgetFile()
+    }
   }
 
   /** Set by the session layer so the UI can enable next/previous buttons. */
@@ -438,6 +489,8 @@ export class MpvController extends EventEmitter {
   }
 
   dispose(): void {
+    // Quitting is not mpv dying: nothing should try to bring it back.
+    this.gone = true
     this.proc?.child.kill()
     this.proc = null
     this.ipc = null

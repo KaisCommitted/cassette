@@ -38,6 +38,7 @@ import { createMainWindow } from './windows/mainWindow'
 import { createOverlayWindow } from './windows/overlayWindow'
 import { createVideoWindow } from './windows/videoWindow'
 import { createOverlayInteraction } from './windows/overlayInteraction'
+import { PlayerViewport } from './windows/playerViewport'
 import { ThumbnailService } from './thumbs/thumbnails'
 import { serveThumbnails } from './thumbs/thumbProtocol'
 import { MetadataStore } from './tmdb/metadataStore'
@@ -196,12 +197,16 @@ async function bootstrap(): Promise<void> {
   }
 
   const mainWindow = createMainWindow()
+  // Where the player sits: the library's content area, or the whole display
+  // while fullscreen. The library window itself never goes fullscreen; see
+  // PlayerViewport for the Alt-Tab bug that rules it out.
+  const viewport = new PlayerViewport(mainWindow)
   // The overlay is owned by the video window, which keeps it above the
   // picture without ever being always-on-top; see createOverlayWindow.
-  const videoWindow = createVideoWindow(mainWindow)
-  const overlayWindow = createOverlayWindow(mainWindow, videoWindow)
+  const videoWindow = createVideoWindow(mainWindow, viewport)
+  const overlayWindow = createOverlayWindow(videoWindow, viewport)
 
-  const overlayInteraction = createOverlayInteraction(mainWindow, overlayWindow)
+  const overlayInteraction = createOverlayInteraction(mainWindow, overlayWindow, viewport)
   const mpv = new MpvController()
 
   // Handlers must be registered before the renderer mounts and starts calling
@@ -253,6 +258,7 @@ async function bootstrap(): Promise<void> {
     videoWindow,
     overlayWindow,
     overlayInteraction,
+    viewport,
     currentKey: null,
     library: await readJson<Library | null>(libraryFile(), null)
   }
@@ -268,6 +274,22 @@ async function bootstrap(): Promise<void> {
 
 
   await mpv.start(videoWindow.getNativeWindowHandle(), legacyCompositing)
+
+  // mpv dying mid-episode used to leave a dead player on screen, every
+  // control waiting five seconds on a reply that would never come. Close the
+  // player and start a fresh mpv, so the next play works as if nothing
+  // had happened.
+  mpv.on('exit', () => {
+    void (async () => {
+      console.error('[cassette] mpv exited unexpectedly')
+      if (ctx && mpv.getState().path) await stopPlayback(ctx)
+      if (!videoWindow.isDestroyed()) {
+        await mpv.start(videoWindow.getNativeWindowHandle(), legacyCompositing)
+      }
+    })().catch((error: Error) => {
+      console.error('[cassette] could not restart mpv:', error.message)
+    })
+  })
 
   const hotkey = new GlobalHotkeyMachine({
     isArmed: () => Boolean(mpv.getState().path) && !mpv.getState().paused,
@@ -413,7 +435,7 @@ async function bootstrap(): Promise<void> {
     // is not a binding, so it cannot be moved or lost.
     if (input.key === 'Escape' && !input.control && !input.alt && !input.shift && !input.meta) {
       event.preventDefault()
-      if (mainWindow.isFullScreen()) {
+      if (viewport.isFullscreen) {
         if (ctx) void toggleFullscreen(ctx).catch(() => undefined)
       } else {
         runActionSafely('stop')
@@ -443,7 +465,9 @@ async function bootstrap(): Promise<void> {
   // video while playing. They resolve through exactly the same table as keys.
   ipcMain.on(IPC.runInput, (_event, descriptor: string) => {
     const action = ctx?.bindings.resolve(descriptor)
-    if (!action) return
+    // As with keys: the native hook sees this same press, so running it here
+    // too hid the window and brought it straight back.
+    if (!action || action === 'hideAndPause') return
     if (playerOnly.has(action) && !mpv.getState().path) return
     runActionSafely(action)
   })
@@ -459,6 +483,14 @@ async function bootstrap(): Promise<void> {
       // rolled on again, skipping one; and mpv often reports the position as
       // gone before the end itself, so a real ending looked cut short and
       // the player sat on a blank screen instead of moving on.
+      //
+      // A file mpv could not open, or gave up on, closes the player rather
+      // than leaving it on a black screen; the controller has already
+      // forgotten the file.
+      if (reason === 'error') {
+        if (ctx) await stopPlayback(ctx)
+        return
+      }
       if (reason !== 'eof') return
       if (!ctx?.library || !ctx.currentKey) return
       const finishedKey = ctx.currentKey
@@ -578,10 +610,6 @@ async function bootstrap(): Promise<void> {
     }
   })
 
-  // Leaving fullscreen with Escape is a Windows convention; keep state in sync.
-  mainWindow.on('leave-full-screen', () => mpv.setFullscreen(false))
-  mainWindow.on('enter-full-screen', () => mpv.setFullscreen(true))
-
   // A paused picture is not redrawn by anything once the window around it
   // changes size, so it goes black; ask for it again once the resize settles.
   let redrawTimer: ReturnType<typeof setTimeout> | null = null
@@ -596,11 +624,13 @@ async function bootstrap(): Promise<void> {
       })
     }, 250)
   }
-  mainWindow.on('resize', redrawIfPaused)
-  mainWindow.on('enter-full-screen', redrawIfPaused)
-  mainWindow.on('leave-full-screen', redrawIfPaused)
+  // The video window is what mpv draws into, so its resize is the one that
+  // counts, whether the library window was resized or the player went
+  // fullscreen. Focus can come back to either window after an Alt-Tab.
+  videoWindow.on('resize', redrawIfPaused)
   mainWindow.on('restore', redrawIfPaused)
   mainWindow.on('focus', redrawIfPaused)
+  overlayWindow.on('focus', redrawIfPaused)
 
   // CASSETTE_AUTOPLAY starts the first episode unattended, so rendering can be
   // verified by screen capture without a person driving the UI.

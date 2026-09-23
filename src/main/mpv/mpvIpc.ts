@@ -16,6 +16,8 @@ interface Pending {
  */
 export const COMMAND_TIMEOUT_MS = 5000
 
+const GONE = 'mpv is gone: its connection closed'
+
 /**
  * mpv's JSON IPC: one JSON object per line, in both directions.
  * Replies carry back the `request_id` we sent, so they may arrive
@@ -25,10 +27,30 @@ export class MpvIpc extends EventEmitter {
   private nextId = 1
   private buffer = ''
   private pending = new Map<number, Pending>()
+  /** Set once the pipe has closed; nothing sent after that can be answered. */
+  private gone = false
 
   constructor(private readonly socket: Duplex) {
     super()
     this.socket.on('data', (chunk: Buffer) => this.onData(chunk.toString('utf8')))
+    // mpv crashing, or being killed, closes the pipe. Everything waiting on
+    // it fails now rather than each timing out in turn, and anything asked
+    // afterwards fails at once, so a dead player never passes for a slow one.
+    const onGone = (): void => this.onGone()
+    this.socket.on('close', onGone)
+    this.socket.on('end', onGone)
+    this.socket.on('error', onGone)
+  }
+
+  private onGone(): void {
+    if (this.gone) return
+    this.gone = true
+    for (const entry of this.pending.values()) {
+      clearTimeout(entry.timer)
+      entry.reject(new Error(GONE))
+    }
+    this.pending.clear()
+    this.emit('close')
   }
 
   private onData(chunk: string): void {
@@ -70,6 +92,7 @@ export class MpvIpc extends EventEmitter {
   }
 
   command<T>(args: unknown[]): Promise<T> {
+    if (this.gone) return Promise.reject(new Error(GONE))
     const request_id = this.nextId++
     const payload = `${JSON.stringify({ command: args, request_id })}\n`
     return new Promise<T>((resolve, reject) => {

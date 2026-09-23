@@ -1,5 +1,6 @@
 import { screen, type BrowserWindow } from 'electron'
 import { IPC } from '@shared/types'
+import type { PlayerViewport } from './playerViewport'
 
 /** Height of the strip at the bottom of the window that the controls occupy. */
 export const CONTROL_ZONE_HEIGHT = 140
@@ -29,13 +30,14 @@ export interface OverlayInteraction {
  * churn is where the black picture, the controls that stopped taking clicks
  * and the pile of phantom Cassette entries in Alt-Tab came from.
  *
- * Nothing needs the switching. The overlay covers exactly the content area,
- * so a cursor outside it is not over it anyway, and while it is hidden it
- * takes nothing.
+ * Nothing needs the switching. The overlay covers exactly the player
+ * viewport, so a cursor outside it is not over it anyway, and while it is
+ * hidden it takes nothing.
  */
 export function createOverlayInteraction(
   mainWindow: BrowserWindow,
-  overlay: BrowserWindow
+  overlay: BrowserWindow,
+  viewport: PlayerViewport
 ): OverlayInteraction {
   let timer: ReturnType<typeof setInterval> | null = null
   let last = { x: -1, y: -1 }
@@ -48,7 +50,9 @@ export function createOverlayInteraction(
   const tick = (): void => {
     if (overlay.isDestroyed() || mainWindow.isDestroyed()) return
     const point = screen.getCursorScreenPoint()
-    const bounds = mainWindow.getContentBounds()
+    // The player's area: the library's content area, or the whole display
+    // while fullscreen.
+    const bounds = viewport.bounds()
 
     const inside =
       point.x >= bounds.x &&
