@@ -1,6 +1,6 @@
 {
   "name": "cassette",
-  "version": "0.1.0",
+  "version": "0.4.8",
   "description": "A local media library and player for Windows. Your own files, with the browsing of a streaming app and the playback of VLC.",
   "main": "out/main/index.js",
   "license": "MIT",
