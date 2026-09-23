@@ -7,9 +7,9 @@
  * selector they explain.
  */
 
-@import './styles/legacy.css';
 @import '../shared/tokens.css';
 @import './styles/base.css';
 @import './styles/shell.css';
 @import './styles/library.css';
 @import './styles/series.css';
+@import './styles/settings.css';

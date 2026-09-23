@@ -9,7 +9,10 @@ import {
   type Settings
 } from '@shared/types'
 import { SubtitleSettings } from '../components/SubtitleSettings'
+import { DraftInput, Section, SwitchRow } from '../components/SettingsParts'
 import { describeCaptured, humaniseDescriptor } from '../inputDescriptors'
+import { Icon, Logo } from '../../shared/Icon'
+import { formatAgo } from '../select'
 
 export interface SettingsViewProps {
   settings: Settings | null
@@ -28,19 +31,18 @@ export interface SettingsViewProps {
   onMetadata: (metadata: MetadataSnapshot) => void
 }
 
-export function SettingsView({
-  settings,
-  bindings,
-  onChooseFolder,
-  onRescan,
-  onCancelScan,
-  onAssign,
-  onResetBindings,
-  onChangeSettings,
-  scanning,
-  scanProgress
-}: SettingsViewProps) {
-  const [listening, setListening] = useState<string | null>(null)
+const SECTIONS = [
+  { id: 'folder', title: 'Media folder' },
+  { id: 'playback', title: 'Playback' },
+  { id: 'subtitles', title: 'Subtitles' },
+  { id: 'appearance', title: 'Subtitle appearance' },
+  { id: 'services', title: 'Online services' },
+  { id: 'controls', title: 'Controls' },
+  { id: 'about', title: 'About' }
+] as const
+
+export function SettingsView(props: SettingsViewProps) {
+  const { settings, scrollRoot } = props
 
   // Whether this build ships its own keys decides what an empty box means, so
   // it is asked for once rather than guessed at.
@@ -52,6 +54,356 @@ export function SettingsView({
   useEffect(() => {
     void window.cassette.getBundledKeys().then(setBundled)
   }, [])
+
+  // The contents list follows the section you are reading.
+  const [active, setActive] = useState<string>(SECTIONS[0].id)
+  useEffect(() => {
+    const root = scrollRoot.current
+    if (!root) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((e) => e.isIntersecting)
+        if (visible[0]) setActive(visible[0].target.id.replace('settings-', ''))
+      },
+      { root, rootMargin: '0px 0px -75% 0px' }
+    )
+    for (const s of SECTIONS) {
+      const el = document.getElementById(`settings-${s.id}`)
+      if (el) observer.observe(el)
+    }
+    return () => observer.disconnect()
+  }, [scrollRoot, settings === null])
+
+  const jump = (id: string): void => {
+    const section = document.getElementById(`settings-${id}`)
+    if (!section) return
+    section.scrollIntoView({ block: 'start' })
+    section.querySelector<HTMLElement>('h2')?.focus({ preventScroll: true })
+    setActive(id)
+  }
+
+  return (
+    <div className="page page-settings">
+      <header className="settings-head">
+        <h1 className="settings-title" tabIndex={-1} data-return="page-start">
+          Settings
+        </h1>
+        <p className="settings-sub">Where your files live, and how you drive the player.</p>
+      </header>
+
+      <div className="settings-layout">
+        <nav className="settings-nav" aria-label="Settings sections">
+          {SECTIONS.map((s) => (
+            <button
+              key={s.id}
+              className="settings-nav-link"
+              aria-current={active === s.id ? 'true' : undefined}
+              onClick={() => jump(s.id)}
+            >
+              {s.title}
+            </button>
+          ))}
+        </nav>
+
+        <div className="settings-sections">
+          <FolderSection {...props} />
+
+          {settings && (
+            <>
+              <Section id="playback" title="Playback">
+                <SwitchRow
+                  label="Play the next episode automatically"
+                  help="Runs on through a season and into the next one when it finishes. Turn it off to stop after every episode."
+                  checked={settings.autoplayNext}
+                  onChange={(v) => props.onChangeSettings({ autoplayNext: v })}
+                />
+                <SwitchRow
+                  label="Even out loud and quiet scenes"
+                  help="Lifts quiet dialogue and holds back sudden loud scenes, for watching at low volume without reaching for the remote."
+                  checked={settings.nightAudio}
+                  onChange={(v) => props.onChangeSettings({ nightAudio: v })}
+                />
+              </Section>
+
+              <SubtitleSettings
+                settings={settings}
+                onChange={props.onChangeSettings}
+                previewArt={previewBackdrop(props.library, props.metadata)}
+              />
+
+              <Section id="services" title="Online services">
+                <p className="section-intro">
+                  Cassette only goes online for artwork and subtitles. Each box can be left
+                  empty.
+                </p>
+                <KeyRow
+                  label="TMDB API key"
+                  value={settings.tmdbApiKey}
+                  bundled={bundled.tmdb}
+                  help={
+                    bundled.tmdb
+                      ? 'Posters, backdrops and episode details. Cassette comes with a key; put your own here to use that instead, or clear the box to go back to the built-in one.'
+                      : 'Posters, backdrops and episode details. A free key comes with an account at themoviedb.org. Without one, tapes show frames from your own files.'
+                  }
+                  onChange={(v) => props.onChangeSettings({ tmdbApiKey: v })}
+                />
+                <KeyRow
+                  label="SubDL API key"
+                  value={settings.subdlApiKey}
+                  bundled={bundled.subdl}
+                  help={
+                    bundled.subdl
+                      ? 'Cassette comes with a key, so this already works. Put your own here if you would rather not share its daily limit — free from subdl.com. Clear the box to go back to the built-in one.'
+                      : 'A free key from subdl.com allows around two thousand searches a day, which is enough to fill in a whole series in one go.'
+                  }
+                  onChange={(v) => props.onChangeSettings({ subdlApiKey: v })}
+                />
+                <KeyRow
+                  label="OpenSubtitles API key"
+                  value={settings.openSubtitlesApiKey}
+                  bundled={bundled.openSubtitles}
+                  help="Optional fallback, used only for languages SubDL could not supply. Free accounts allow a few downloads a day, so it runs out quickly on its own."
+                  onChange={(v) => props.onChangeSettings({ openSubtitlesApiKey: v })}
+                />
+              </Section>
+            </>
+          )}
+
+          <ControlsSection
+            bindings={props.bindings}
+            onAssign={props.onAssign}
+            onReset={props.onResetBindings}
+          />
+
+          <Section id="about" title="About">
+            <div className="about">
+              <Logo variant="combined" className="about-logo" />
+              <p>
+                Cassette is free and open source, and everything it knows stays on this
+                machine.
+              </p>
+              <p className="about-small">
+                Posters, backdrops and episode details come from TMDB. This product uses the
+                TMDB API but is not endorsed or certified by TMDB.
+              </p>
+            </div>
+          </Section>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** A backdrop from the library for the subtitle preview to sit on. */
+function previewBackdrop(library: Library, metadata: MetadataSnapshot): string | null {
+  for (const s of library.series) {
+    const path = metadata.series[s.id]?.backdropPath
+    if (path) return path
+  }
+  for (const m of library.movies) {
+    const path = metadata.movies[m.id]?.backdropPath
+    if (path) return path
+  }
+  return null
+}
+
+function KeyRow({
+  label,
+  value,
+  bundled,
+  help,
+  onChange
+}: {
+  label: string
+  value: string | null
+  bundled: boolean
+  help: string
+  onChange: (value: string | null) => void
+}) {
+  const id = `key-${label.replace(/\W+/g, '-').toLowerCase()}`
+  return (
+    <div className="setting-row setting-row-stacked">
+      <span className="setting-text">
+        <label className="setting-label" htmlFor={id}>
+          {label}
+        </label>
+        <span className="setting-help">{help}</span>
+      </span>
+      <DraftInput
+        id={id}
+        type="password"
+        autoComplete="off"
+        spellCheck={false}
+        className="setting-input-wide"
+        value={value ?? ''}
+        placeholder={bundled ? 'Using the built-in key' : 'Not set'}
+        onCommit={(v) => onChange(v.trim() || null)}
+      />
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+
+function FolderSection({
+  settings,
+  library,
+  scanning,
+  scanProgress,
+  onChooseFolder,
+  onRescan,
+  onCancelScan,
+  onChangeSettings,
+  onMetadata
+}: SettingsViewProps) {
+  const root = settings?.libraryRoots[0]
+  const [artwork, setArtwork] = useState<'idle' | 'busy' | 'done'>('idle')
+
+  const lookUpArtwork = async (): Promise<void> => {
+    setArtwork('busy')
+    try {
+      onMetadata(await window.cassette.refreshMetadata(false))
+      setArtwork('done')
+    } catch {
+      setArtwork('idle')
+    }
+  }
+
+  const films = library.movies.length
+  const series = library.series.length
+
+  return (
+    <Section id="folder" title="Media folder">
+      <div className="folder-card">
+        <Icon name="folder" className="folder-icon" />
+        <div className="folder-text">
+          <p className="folder-path">{root ?? 'No folder chosen yet'}</p>
+          <p className="folder-stats">
+            {series === 1 ? '1 series' : `${series} series`} and{' '}
+            {films === 1 ? '1 film' : `${films} films`}. Scanned {formatAgo(library.scannedAt)}.
+          </p>
+        </div>
+        <div className="folder-actions">
+          <button className="btn btn-ghost btn-sm" onClick={onChooseFolder} disabled={scanning}>
+            Change folder
+          </button>
+          {scanning ? (
+            <button className="btn btn-ghost btn-sm" onClick={onCancelScan}>
+              Stop
+            </button>
+          ) : (
+            <button className="btn btn-ghost btn-sm" onClick={onRescan} disabled={!root}>
+              <Icon name="rescan" />
+              Rescan
+            </button>
+          )}
+        </div>
+      </div>
+
+      {scanning && <ScanProgress progress={scanProgress} />}
+
+      <p className="setting-help setting-help-block">
+        Rescan after adding or removing files. Your watch history is matched by file size
+        and name, so moving a folder keeps your place.
+      </p>
+
+      {settings && (
+        <div className="setting-row">
+          <span className="setting-text">
+            <label className="setting-label" htmlFor="minimum-minutes">
+              Leave out anything shorter than
+            </label>
+            <span className="setting-help">
+              Trailers, samples and featurettes end up in the same folders as what you
+              actually want to watch. Files are checked once and the answer is remembered,
+              so this only costs time on the first scan. Set it to 0 to keep everything.
+            </span>
+          </span>
+          <span className="setting-unit">
+            <DraftInput
+              id="minimum-minutes"
+              type="number"
+              min={0}
+              max={120}
+              step={1}
+              inputMode="numeric"
+              className="setting-input-number"
+              value={String(settings.minimumDurationMinutes)}
+              onCommit={(v) => onChangeSettings({ minimumDurationMinutes: clampMinutes(v) })}
+            />
+            minutes
+          </span>
+        </div>
+      )}
+
+      <div className="setting-row">
+        <span className="setting-text">
+          <span className="setting-label">Artwork</span>
+          <span className="setting-help">
+            {artwork === 'done'
+              ? 'Looked up. Anything still without a poster was not found on TMDB, and shows a frame from the file instead.'
+              : 'Posters and episode details are fetched after each scan. Look again for anything that has none, for instance after adding a TMDB key.'}
+          </span>
+        </span>
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={() => void lookUpArtwork()}
+          disabled={artwork === 'busy' || scanning}
+        >
+          {artwork === 'busy' ? 'Looking…' : 'Look up missing artwork'}
+        </button>
+      </div>
+    </Section>
+  )
+}
+
+/**
+ * What the scan is doing, while it does it.
+ *
+ * A first scan opens every file to read its duration, which takes long enough
+ * on a large folder that a button reading "Scanning" and nothing else is
+ * indistinguishable from the app having hung.
+ */
+function ScanProgress({ progress }: { progress: ScanProgressInfo | null }) {
+  const pct =
+    progress && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : null
+
+  return (
+    <div className="scan-progress" role="status">
+      <span className="meter" aria-hidden="true">
+        <span
+          className={pct === null ? 'is-indeterminate' : undefined}
+          style={pct === null ? undefined : { width: `${pct}%` }}
+        />
+      </span>
+      <span className="scan-progress-label">
+        {pct === null
+          ? 'Looking through your folders'
+          : `Checking ${progress!.done} of ${progress!.total} files`}
+      </span>
+    </div>
+  )
+}
+
+/** An empty or nonsense box means "keep everything" rather than NaN minutes. */
+function clampMinutes(value: string): number {
+  const minutes = Number(value)
+  if (!Number.isFinite(minutes)) return 0
+  return Math.max(0, Math.min(120, Math.round(minutes)))
+}
+
+// ---------------------------------------------------------------------------
+
+function ControlsSection({
+  bindings,
+  onAssign,
+  onReset
+}: {
+  bindings: KeyBindings
+  onAssign: (descriptor: string, actionId: string) => void
+  onReset: () => void
+}) {
+  const [listening, setListening] = useState<string | null>(null)
 
   const descriptorsFor = useCallback(
     (actionId: string) =>
@@ -81,13 +433,16 @@ export function SettingsView({
     const onMouse = (e: MouseEvent): void => {
       e.preventDefault()
       e.stopPropagation()
+      swallowNextClick()
+      // Pressing the row's own Cancel button cancels, rather than binding
+      // the left button to the action by accident.
+      if ((e.target as HTMLElement | null)?.closest('[data-capture-cancel]')) return finish(null)
       finish(describeCaptured({ type: 'mouse', event: e }))
     }
     const onWheel = (e: WheelEvent): void => {
       e.preventDefault()
       finish(describeCaptured({ type: 'wheel', event: e }))
     }
-
     window.addEventListener('keydown', onKey, true)
     window.addEventListener('mousedown', onMouse, true)
     window.addEventListener('wheel', onWheel, { capture: true, passive: false })
@@ -101,207 +456,67 @@ export function SettingsView({
   }, [listening, onAssign])
 
   const groups = [...new Set(ACTIONS.map((a) => a.group))]
-  const root = settings?.libraryRoots[0]
 
   return (
-    <>
-      <h1 className="page-title">Settings</h1>
-      <p className="page-sub">Where your files live, and how you drive the player.</p>
-
-      <h2 className="section-title">Media folder</h2>
-      <div className="field">
-        <div className="path-box">
-          <div className="path">{root ?? 'No folder chosen yet'}</div>
-          <button className="btn" onClick={onChooseFolder}>
-            Change
-          </button>
-          {scanning ? (
-            <button className="btn" onClick={onCancelScan}>
-              Stop
-            </button>
-          ) : (
-            <button className="btn" onClick={onRescan} disabled={!root}>
-              Rescan
-            </button>
-          )}
-        </div>
-
-        {scanning && <ScanProgress progress={scanProgress} />}
-        <p className="field-help">
-          Rescan after adding or removing files. Your watch history is matched by file
-          size and name, so moving a folder keeps your place.
-        </p>
-      </div>
-
-      {settings && (
-        <div className="field">
-          <div className="field-label">Ignore anything shorter than</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <input
-              className="search"
-              type="number"
-              min={0}
-              max={120}
-              step={1}
-              value={settings.minimumDurationMinutes}
-              onChange={(e) =>
-                onChangeSettings({
-                  minimumDurationMinutes: clampMinutes(e.target.value)
-                })
-              }
-              style={{ width: 96 }}
-            />
-            <span style={{ fontSize: 13, opacity: 0.7 }}>minutes</span>
-          </div>
-          <p className="field-help">
-            Trailers, samples and featurettes end up in the same folders as what you
-            actually want to watch. Files are checked once and the answer is
-            remembered, so this only costs time on the first scan. Set it to 0 to keep
-            everything.
-          </p>
-        </div>
-      )}
-
-      {settings && (
-        <>
-          <h2 className="section-title">Playback</h2>
-          <div className="field">
-            <label className="toggle">
-              <input
-                type="checkbox"
-                checked={settings.autoplayNext}
-                onChange={(e) => onChangeSettings({ autoplayNext: e.target.checked })}
-              />
-              Play the next episode automatically
-            </label>
-            <p className="field-help">
-              Runs on through a season and into the next one when it finishes. Turn it
-              off to stop after every episode.
-            </p>
-          </div>
-
-          <div className="field">
-            <label className="toggle">
-              <input
-                type="checkbox"
-                checked={settings.nightAudio}
-                onChange={(e) => onChangeSettings({ nightAudio: e.target.checked })}
-              />
-              Even out loud and quiet scenes
-            </label>
-            <p className="field-help">
-              Lifts quiet dialogue and holds back sudden loud scenes — for watching at
-              low volume without reaching for the remote.
-            </p>
-          </div>
-
-          <SubtitleSettings settings={settings} onChange={onChangeSettings} />
-
-          <h2 className="section-title">Subtitle downloads</h2>
-          <div className="field">
-            <div className="field-label">SubDL API key</div>
-            <input
-              className="search"
-              type="password"
-              value={settings.subdlApiKey ?? ''}
-              placeholder={bundled.subdl ? 'Using the built-in key' : 'Not set'}
-              onChange={(e) => onChangeSettings({ subdlApiKey: e.target.value || null })}
-            />
-            <p className="field-help">
-              {bundled.subdl
-                ? 'Cassette comes with a key, so this already works. Put your own here if you would rather not share its daily limit — free from subdl.com. Clear the box to go back to the built-in one.'
-                : 'A free key from subdl.com allows around two thousand searches a day, which is enough to fill in a whole series in one go.'}
-            </p>
-          </div>
-
-          <div className="field">
-            <label className="toggle">
-              <input
-                type="checkbox"
-                checked={settings.downloadEveryPreferredLanguage}
-                onChange={(e) =>
-                  onChangeSettings({ downloadEveryPreferredLanguage: e.target.checked })
-                }
-              />
-              Fetch every language you listed, not just the first
-            </label>
-            <p className="field-help">
-              Leaves each episode with one subtitle track per language, so you can
-              switch between them from the player's Subtitles menu.
-            </p>
-          </div>
-
-          <div className="field">
-            <div className="field-label">OpenSubtitles API key</div>
-            <input
-              className="search"
-              type="password"
-              value={settings.openSubtitlesApiKey ?? ''}
-              placeholder={bundled.openSubtitles ? 'Using the built-in key' : 'Not set'}
-              onChange={(e) =>
-                onChangeSettings({ openSubtitlesApiKey: e.target.value || null })
-              }
-            />
-            <p className="field-help">
-              Optional fallback, used only for languages SubDL could not supply. Free
-              accounts allow a few downloads a day, so it runs out quickly on its own.
-            </p>
-          </div>
-        </>
-      )}
-
-      <h2 className="section-title">Controls</h2>
-      <p className="field-help" style={{ marginBottom: 14 }}>
-        Click a binding, then press any key or mouse button. Side buttons work. Press
-        Escape to leave it unchanged.
+    <Section id="controls" title="Controls">
+      <p className="section-intro">
+        VLC's keys by default. Press Add, then any key, mouse button or wheel direction to
+        bind it too — side buttons work. Escape leaves it unchanged. A key already used
+        elsewhere moves to the new action.
       </p>
 
       {groups.map((group) => (
-        <div key={group} style={{ marginBottom: 22 }}>
-          <div className="field-label" style={{ color: 'var(--muted)' }}>
-            {group}
-          </div>
-          <table className="bind-table">
-            <tbody>
-              {ACTIONS.filter((a) => a.group === group).map((action) => {
-                const descriptors = descriptorsFor(action.id)
-                return (
-                  <tr key={action.id}>
-                    <td>{action.label}</td>
-                    <td>
-                      <button
-                        className={`key${listening === action.id ? ' listening' : ''}`}
-                        onClick={() => setListening(action.id)}
-                      >
-                        {listening === action.id
-                          ? 'Press anything'
-                          : descriptors.length > 0
-                            ? descriptors.map(humaniseDescriptor).join(', ')
-                            : 'Not bound'}
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+        <div className="bind-group" key={group}>
+          <h3 className="bind-group-title">{group}</h3>
+          <ul className="bind-list">
+            {ACTIONS.filter((a) => a.group === group).map((action) => {
+              const descriptors = descriptorsFor(action.id)
+              const isListening = listening === action.id
+              return (
+                <li className={isListening ? 'bind-row is-listening' : 'bind-row'} key={action.id}>
+                  <span className="bind-action">{action.label}</span>
+                  <span className="bind-keys">
+                    {isListening ? (
+                      <span className="bind-prompt" role="status">
+                        Press a key or mouse button…
+                      </span>
+                    ) : descriptors.length > 0 ? (
+                      descriptors.map((d) => (
+                        <kbd className="keycap" key={d}>
+                          {humaniseDescriptor(d)}
+                        </kbd>
+                      ))
+                    ) : (
+                      <span className="bind-none">Not bound</span>
+                    )}
+                  </span>
+                  <button
+                    className="btn btn-quiet btn-sm bind-add"
+                    data-capture-cancel={isListening ? '' : undefined}
+                    aria-label={isListening ? 'Cancel' : `Add a binding for ${action.label}`}
+                    onClick={() => setListening(isListening ? null : action.id)}
+                  >
+                    {isListening ? (
+                      'Cancel'
+                    ) : (
+                      <>
+                        <Icon name="plus" />
+                        Add
+                      </>
+                    )}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
         </div>
       ))}
 
-      <button className="btn" onClick={onResetBindings}>
+      <button className="btn btn-ghost" onClick={onReset}>
+        <Icon name="rescan" />
         Restore VLC defaults
       </button>
-
-      <h2 className="section-title">About</h2>
-      <p className="field-help" style={{ maxWidth: '62ch' }}>
-        Cassette is free and open source, and everything it knows stays on this
-        machine.
-      </p>
-      <p className="field-help" style={{ maxWidth: '62ch' }}>
-        Posters, backdrops and episode details come from TMDB. This product uses
-        the TMDB API but is not endorsed or certified by TMDB.
-      </p>
-    </>
+    </Section>
   )
 }
 
@@ -310,40 +525,19 @@ function preventDefault(e: Event): void {
 }
 
 /**
- * What the scan is doing, while it does it.
- *
- * A first scan opens every file to read its duration, which takes long enough
- * on a large folder that a button reading "Scanning" and nothing else is
- * indistinguishable from the app having hung.
+ * The press that was just captured as a binding also produces a click when the
+ * button comes up. Left alone it would press whatever is under the pointer —
+ * the Add button itself, which would start listening all over again.
  */
-function ScanProgress({ progress }: { progress: ScanProgressInfo | null }) {
-  const pct =
-    progress && progress.total > 0
-      ? Math.round((progress.done / progress.total) * 100)
-      : null
-
-  return (
-    <div className="scan-progress">
-      <div className="scan-bar">
-        {/* Before the first file is reported there is no ratio to show, so the
-            bar sweeps rather than sitting empty. */}
-        <div
-          className={pct === null ? 'scan-fill indeterminate' : 'scan-fill'}
-          style={pct === null ? undefined : { width: `${pct}%` }}
-        />
-      </div>
-      <div className="scan-label">
-        {pct === null
-          ? 'Looking through your folders'
-          : `Checking ${progress!.done} of ${progress!.total} files`}
-      </div>
-    </div>
+function swallowNextClick(): void {
+  const swallow = (e: Event): void => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+  window.addEventListener('click', swallow, { capture: true, once: true })
+  window.addEventListener(
+    'mouseup',
+    () => setTimeout(() => window.removeEventListener('click', swallow, true), 0),
+    { capture: true, once: true }
   )
-}
-
-/** An empty or nonsense box means "keep everything" rather than NaN minutes. */
-function clampMinutes(value: string): number {
-  const minutes = Number(value)
-  if (!Number.isFinite(minutes)) return 0
-  return Math.max(0, Math.min(120, Math.round(minutes)))
 }

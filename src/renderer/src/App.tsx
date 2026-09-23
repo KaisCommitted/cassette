@@ -340,7 +340,6 @@ export function App() {
           ))}
 
         {view.name === 'settings' && (
-          <div className="page">
           <SettingsView
             settings={settings}
             bindings={bindings}
@@ -363,7 +362,6 @@ export function App() {
             }}
             onMetadata={setMetadata}
           />
-          </div>
         )}
       </main>
     </div>
