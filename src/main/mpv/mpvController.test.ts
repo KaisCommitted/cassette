@@ -77,3 +77,43 @@ describe('MpvController when mpv goes away', () => {
     await expect(mpv.setPaused(true)).rejects.toThrow(/gone|not running/)
   })
 })
+
+/** Simulates mpv reporting a property, the way `time-pos` and `duration` do. */
+function reportProperty(sock: Duplex, name: string, data: number): Promise<void> {
+  sock.push(`${JSON.stringify({ event: 'property-change', name, data })}\n`)
+  return new Promise((r) => setImmediate(r))
+}
+
+describe('MpvController.seekRelative', () => {
+  it('emits where the jump lands, for a toast to show', async () => {
+    const { mpv, sock } = await playing()
+    await reportProperty(sock, 'duration', 1000)
+    await reportProperty(sock, 'time-pos', 200)
+
+    const landed = vi.fn()
+    mpv.on('seekJump', landed)
+    await mpv.seekRelative(60)
+    expect(landed).toHaveBeenCalledWith(260)
+  })
+
+  it('clamps the landing spot to the end of the file', async () => {
+    const { mpv, sock } = await playing()
+    await reportProperty(sock, 'duration', 1000)
+    await reportProperty(sock, 'time-pos', 950)
+
+    const landed = vi.fn()
+    mpv.on('seekJump', landed)
+    await mpv.seekRelative(200)
+    expect(landed).toHaveBeenCalledWith(1000)
+  })
+
+  it('never lands before zero, even with no known duration yet', async () => {
+    const { mpv, sock } = await playing()
+    await reportProperty(sock, 'time-pos', 5)
+
+    const landed = vi.fn()
+    mpv.on('seekJump', landed)
+    await mpv.seekRelative(-60)
+    expect(landed).toHaveBeenCalledWith(0)
+  })
+})

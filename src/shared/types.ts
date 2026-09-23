@@ -286,6 +286,8 @@ export interface CassetteApi {
    * window changes size, `in` once it has settled.
    */
   onScreenTransition: (cb: (phase: 'out' | 'in') => void) => () => void
+  /** Fires when Back/Forward 10s or 1min lands somewhere, with the new position. */
+  onSeekJump: (cb: (positionSeconds: number) => void) => () => void
   /** Fires when the cursor moves over the player, to reveal the controls. */
   onOverlayActivity: (cb: () => void) => () => void
   /** Fires as artwork arrives, and once more when it has all been fetched. */
@@ -325,6 +327,7 @@ export const IPC = {
   previousEpisode: 'player:previous',
   toggleFullscreen: 'player:toggleFullscreen',
   screenTransition: 'player:screenTransition',
+  seekJump: 'player:seekJump',
   setOverlayInteractive: 'overlay:setInteractive',
   overlayActivity: 'overlay:activity',
   updateSettings: 'app:updateSettings',

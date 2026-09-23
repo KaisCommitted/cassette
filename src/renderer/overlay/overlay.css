@@ -648,21 +648,26 @@ p {
   transform: translateX(14px);
 }
 
-/* ---- subtitle delay, shown as it changes ---- */
+/* ---- subtitle delay and seek jumps, shown as they change ---- */
 
+/*
+ * A number that answers a key press made with the controls hidden — the
+ * usual way both of these are used — so it has to say enough on its own.
+ * Sized to be read at a glance rather than looked for.
+ */
 .osd-toast {
   position: absolute;
   left: 50%;
-  top: 96px;
+  top: 92px;
   z-index: 3;
   display: flex;
   align-items: baseline;
-  gap: 10px;
-  padding: 9px 16px 10px;
+  gap: 14px;
+  padding: 13px 22px 15px;
   border: 1px solid oklch(0.906 0.02 80 / 0.14);
-  border-radius: var(--r-md);
-  background: oklch(0.17 0.004 85 / 0.82);
-  box-shadow: 0 6px 24px oklch(0 0 0 / 0.4);
+  border-radius: var(--r-lg);
+  background: oklch(0.17 0.004 85 / 0.85);
+  box-shadow: 0 8px 28px oklch(0 0 0 / 0.45);
   pointer-events: none;
   opacity: 0;
   transform: translate(-50%, -6px);
@@ -675,15 +680,20 @@ p {
   transform: translate(-50%, 0);
   transition-duration: var(--t-quick);
 }
+/* The seek toast sits below the delay one, so nothing overlaps on the rare
+   occasion both land in the same couple of seconds. */
+.osd-toast-seek {
+  top: calc(92px + 60px + 14px);
+}
 .osd-toast-label {
   color: oklch(0.906 0.02 80 / 0.7);
-  font-size: var(--text-sm);
+  font-size: var(--text-md);
 }
 .osd-toast-value {
-  min-width: 4.5ch;
+  min-width: 5ch;
   color: var(--brass);
   font-family: var(--font-display);
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;

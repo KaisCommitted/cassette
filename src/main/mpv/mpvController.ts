@@ -268,7 +268,22 @@ export class MpvController extends EventEmitter {
     await this.setPaused(!this.state.paused)
   }
 
+  /**
+   * Steps the position by a fixed amount — Back 10 seconds, Forward 1
+   * minute — as opposed to dragging the seek bar to an arbitrary point.
+   *
+   * Emits `seekJump` with where this lands, clamped to the file's length,
+   * for the overlay to show as a toast. It is the target computed here
+   * rather than mpv's own answer: mpv reports the real position a moment
+   * later over the same `time-pos` property that ticks every second of
+   * ordinary playback, which is too late for a toast to feel like it
+   * answered the key press, and has no way to tell a jump from a tick.
+   */
   async seekRelative(seconds: number): Promise<void> {
+    const target = this.state.durationSeconds > 0
+      ? Math.max(0, Math.min(this.state.durationSeconds, this.state.positionSeconds + seconds))
+      : Math.max(0, this.state.positionSeconds + seconds)
+    this.emit('seekJump', target)
     await this.send(['seek', seconds, 'relative'])
   }
 

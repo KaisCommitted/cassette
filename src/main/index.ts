@@ -472,6 +472,15 @@ async function bootstrap(): Promise<void> {
     runActionSafely(action)
   })
 
+  // Back/forward 10 seconds and 1 minute land somewhere the picture does not
+  // otherwise say plainly, especially with the controls hidden — the usual
+  // way to use them — so the new position is shown for a moment.
+  mpv.on('seekJump', (positionSeconds: number) => {
+    if (ctx && !ctx.overlayWindow.isDestroyed()) {
+      ctx.overlayWindow.webContents.send(IPC.seekJump, positionSeconds)
+    }
+  })
+
   // Auto-advance: when an episode finishes, roll into the next one. This
   // crosses season boundaries, because findNext walks the series in order.
   mpv.on('end-file', (reason: string | null) => {

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { PlaybackState } from '@shared/types'
 import { ControlBar } from './ControlBar'
-import { describeMouse } from './format'
+import { describeMouse, formatTime } from './format'
 import { useNowPlaying } from './useNowPlaying'
 import { Icon, Logo } from '../shared/Icon'
 import { EASE_IN_OUT, EASE_OUT } from '../shared/motion'
@@ -13,6 +13,8 @@ const IDLE_HIDE_MS = 2600
 const NIGHT_DIM_MAX = 0.6
 /** How long the subtitle delay stays on screen after the last change. */
 const DELAY_TOAST_MS = 1600
+/** How long the landing spot stays on screen after Back/Forward 10s or 1min. */
+const SEEK_TOAST_MS = 1600
 /**
  * How long after a file reports itself open before its picture is brought
  * up: long enough for the resumed frame to be drawn, so what fades up is the
@@ -55,6 +57,7 @@ export function Overlay() {
 
   const nowPlaying = useNowPlaying(state?.path ?? null, state?.label ?? '')
   const delayToast = useDelayToast(state?.subtitleDelayMs ?? null, state?.path ?? null)
+  const seekToast = useSeekToast()
 
   const wake = useCallback(() => {
     setVisible(true)
@@ -126,6 +129,17 @@ export function Overlay() {
       >
         <span className="osd-toast-label">Subtitles</span>
         <span className="osd-toast-value">{formatDelay(delayToast.valueMs)}</span>
+      </div>
+
+      {/* Back/Forward 10 seconds and 1 minute are usually pressed with the
+          controls hidden, so where they landed shows on its own. */}
+      <div
+        className={seekToast.visible ? 'osd-toast osd-toast-seek is-on' : 'osd-toast osd-toast-seek'}
+        role="status"
+        aria-live="polite"
+      >
+        <span className="osd-toast-label">Skipped</span>
+        <span className="osd-toast-value">{formatTime(seekToast.positionSeconds)}</span>
       </div>
 
       {/* Only the button takes the pointer: the band itself lets presses
@@ -201,6 +215,37 @@ function useDelayToast(delayMs: number | null, path: string | null): {
 function formatDelay(ms: number): string {
   if (ms === 0) return '0 ms'
   return `${ms > 0 ? '+' : '−'}${Math.abs(ms)} ms`
+}
+
+/**
+ * Shows where Back/Forward 10 seconds or 1 minute landed, for a moment.
+ *
+ * Every jump is shown — there is no first-value-on-load noise to filter out
+ * here, unlike the subtitle delay: the main process only emits this from an
+ * actual relative seek (mpvController.seekRelative), never from mpv simply
+ * reporting where a new file starts.
+ */
+function useSeekToast(): { visible: boolean; positionSeconds: number } {
+  const [toast, setToast] = useState({ visible: false, positionSeconds: 0 })
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(
+    () =>
+      window.cassette.onSeekJump((positionSeconds) => {
+        setToast({ visible: true, positionSeconds })
+        if (timer.current) clearTimeout(timer.current)
+        timer.current = setTimeout(() => setToast((t) => ({ ...t, visible: false })), SEEK_TOAST_MS)
+      }),
+    []
+  )
+
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current)
+    },
+    []
+  )
+  return toast
 }
 
 /**
