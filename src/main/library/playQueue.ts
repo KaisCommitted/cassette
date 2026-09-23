@@ -61,3 +61,18 @@ export function findPrevious(library: Library, key: string): PlayableItem | null
   const previous = items[index - 1]!
   return previous.seriesId === current.seriesId ? previous : null
 }
+
+/** Which series and season an episode belongs to, for things remembered per season. */
+export function findSeasonOwner(
+  library: Library,
+  key: string
+): { seriesId: string; season: number } | null {
+  for (const series of library.series) {
+    for (const season of series.seasons) {
+      if (season.episodes.some((e) => e.file.key === key)) {
+        return { seriesId: series.id, season: season.season }
+      }
+    }
+  }
+  return null
+}

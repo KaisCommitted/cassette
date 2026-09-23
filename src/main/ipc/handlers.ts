@@ -7,7 +7,7 @@ import {
   type SubtitleSearchOptions
 } from '@shared/types'
 import { scanLibrary } from '../library/scanner'
-import { findNext, findPrevious, type PlayableItem } from '../library/playQueue'
+import { findNext, findPrevious, findSeasonOwner, type PlayableItem } from '../library/playQueue'
 import { resumeTarget } from '../library/resume'
 import { findLocalSubtitles } from '../subs/localSubtitles'
 import { scanForSubtitles, scanOne, type ScanScope } from '../subs/subtitleScan'
@@ -17,6 +17,7 @@ import { bundledKeyAvailability, withBundledKeys } from '../state/bundledKeys'
 import { readJson, writeJsonAtomic } from '../state/atomicJson'
 import type { ProgressStore } from '../state/progressStore'
 import type { SettingsStore } from '../state/settingsStore'
+import type { SubtitleChoiceStore } from '../state/subtitleChoiceStore'
 import type { MpvController } from '../mpv/mpvController'
 import type { OverlayInteraction } from '../windows/overlayInteraction'
 import type { BindingsStore } from '../input/bindingsStore'
@@ -33,6 +34,7 @@ export interface AppContext {
   overlayInteraction: OverlayInteraction
   bindings: BindingsStore
   metadata: MetadataStore
+  subtitleChoices: SubtitleChoiceStore
   sleepTimer: SleepTimer
   /** Pushes timer and autoplay state into the overlay. */
   publishSessionFlags: () => void
@@ -131,6 +133,28 @@ async function closePlayer(ctx: AppContext): Promise<void> {
   await ctx.progress.save()
 }
 
+/**
+ * Remembers a subtitle picked by hand as a position in the menu, against
+ * whichever series and season the playing episode belongs to.
+ *
+ * Only a person choosing counts — the automatic pick made when a file opens
+ * (index.ts) never calls this, or it would overwrite the very thing it is
+ * meant to read.
+ */
+async function rememberSubtitleChoice(ctx: AppContext, id: number | null): Promise<void> {
+  if (!ctx.library || !ctx.currentKey) return
+  const owner = findSeasonOwner(ctx.library, ctx.currentKey)
+  if (!owner) return // a film has no season to remember this against
+
+  if (id === null) {
+    await ctx.subtitleChoices.set(owner.seriesId, owner.season, null)
+    return
+  }
+  const subs = ctx.mpv.getState().tracks.filter((t) => t.type === 'sub')
+  const index = subs.findIndex((t) => t.id === id)
+  if (index === -1) return // not one of this episode's own subtitle tracks
+  await ctx.subtitleChoices.set(owner.seriesId, owner.season, index)
+}
 
 /** How long the picture takes to dip to black before the window changes size. */
 const DIP_MS = 200
@@ -325,7 +349,10 @@ export function registerHandlers(ctx: AppContext): void {
   handle(IPC.setVolume, (volume: number) => ctx.mpv.setVolume(volume))
   handle(IPC.toggleMute, () => ctx.mpv.toggleMute())
   handle(IPC.setSpeed, (speed: number) => ctx.mpv.setSpeed(speed))
-  handle(IPC.setSubtitleTrack, (id: number | null) => ctx.mpv.setSubtitleTrack(id))
+  handle(IPC.setSubtitleTrack, async (id: number | null) => {
+    await ctx.mpv.setSubtitleTrack(id)
+    await rememberSubtitleChoice(ctx, id)
+  })
   handle(IPC.setAudioTrack, (id: number) => ctx.mpv.setAudioTrack(id))
   handle(IPC.setSubtitleDelay, (ms: number) => ctx.mpv.setSubtitleDelay(ms))
 

@@ -40,9 +40,13 @@ function rank(track: TrackInfo, preferences: string[]): number {
  * Prefer a full-dialogue track over a signs-and-songs or forced one.
  *
  * Plurals matter here: these are almost always labelled "Signs and Songs".
+ * SDH is not partial — it is full dialogue plus sound description for the
+ * deaf and hard-of-hearing — so it is not demoted here; it competes with a
+ * plain track on nothing but track order, which is what keeps the first
+ * track a file offers the default when both are equally full.
  */
 function isPartial(track: TrackInfo): boolean {
-  return /\b(signs?|songs?|forced|commentary|sdh)\b/i.test(track.title ?? '')
+  return /\b(signs?|songs?|forced|commentary)\b/i.test(track.title ?? '')
 }
 
 export function chooseSubtitleTrack(
@@ -66,6 +70,31 @@ export function chooseSubtitleTrack(
   // With no language match at all, still turn on the only track there is;
   // a subtitle in an unexpected language beats none for a foreign-language file.
   return best.id
+}
+
+/**
+ * A season's remembered subtitle pick, as a position in the menu rather than
+ * a track id: track ids are particular to one file, but "the second option"
+ * is a choice that carries across a season. `null` means off.
+ */
+export type SubtitleChoice = number | null
+
+/**
+ * Applies a season's remembered choice to one episode's own subtitle list,
+ * in the order the menu shows them (TrackMenu.tsx, ControlBar's `subs`).
+ *
+ * `undefined` means there is nothing to apply — no choice saved for this
+ * season, or this episode has fewer options than the position asked for —
+ * and the caller should fall back to {@link chooseSubtitleTrack}'s own
+ * default instead of guessing.
+ */
+export function applySeasonSubtitleChoice(
+  subsInMenuOrder: TrackInfo[],
+  choice: SubtitleChoice | undefined
+): number | null | undefined {
+  if (choice === undefined) return undefined
+  if (choice === null) return null
+  return subsInMenuOrder[choice]?.id
 }
 
 export function chooseAudioTrack(

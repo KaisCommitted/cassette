@@ -81,3 +81,5 @@ export const metadataFile = (): string => join(dataDir(), 'metadata.json')
 export const artDir = (): string => join(cacheDir(), 'art')
 
 export const probeFile = (): string => join(dataDir(), 'probe.json')
+
+export const subtitleChoicesFile = (): string => join(dataDir(), 'subtitleChoices.json')

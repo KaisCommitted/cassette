@@ -5,10 +5,10 @@ import { describeKey } from './input/descriptors'
 import { BindingsStore } from './input/bindingsStore'
 import { GlobalHotkeyMachine } from './input/globalHotkey'
 import { startNativeHook } from './input/nativeHook'
-import { findNext, findPrevious } from './library/playQueue'
+import { findNext, findPrevious, findSeasonOwner } from './library/playQueue'
 import { NightLight } from './player/nightLight'
 import { SleepTimer } from './player/sleepTimer'
-import { chooseAudioTrack, chooseSubtitleTrack } from './player/trackChoice'
+import { applySeasonSubtitleChoice, chooseAudioTrack, chooseSubtitleTrack } from './player/trackChoice'
 import { killRunningProbes } from './library/mediaProbe'
 import {
   cancelScan,
@@ -23,6 +23,7 @@ import {
 import { MpvController } from './mpv/mpvController'
 import { ProgressStore } from './state/progressStore'
 import { SettingsStore } from './state/settingsStore'
+import { SubtitleChoiceStore } from './state/subtitleChoiceStore'
 import { readJson } from './state/atomicJson'
 import {
   keybindsFile,
@@ -30,7 +31,8 @@ import {
   cleanupStaleTemps,
   migrateLegacyData,
   progressFile,
-  settingsFile
+  settingsFile,
+  subtitleChoicesFile
 } from './state/paths'
 import { createMainWindow } from './windows/mainWindow'
 import { createOverlayWindow } from './windows/overlayWindow'
@@ -163,7 +165,14 @@ async function bootstrap(): Promise<void> {
   const progress = new ProgressStore(progressFile())
   const bindings = new BindingsStore(keybindsFile())
   const metadata = new MetadataStore()
-  await Promise.all([settings.load(), progress.load(), bindings.load(), metadata.load()])
+  const subtitleChoices = new SubtitleChoiceStore(subtitleChoicesFile())
+  await Promise.all([
+    settings.load(),
+    progress.load(),
+    bindings.load(),
+    metadata.load(),
+    subtitleChoices.load()
+  ])
 
   // The renderer is served over app:// rather than loaded from disk, so it
   // has a real origin and can request our other custom schemes. Registered
@@ -235,6 +244,7 @@ async function bootstrap(): Promise<void> {
     mpv,
     bindings,
     metadata,
+    subtitleChoices,
     sleepTimer,
     publishSessionFlags,
     endSleep,
@@ -507,11 +517,24 @@ async function bootstrap(): Promise<void> {
       // an embedded track while a preferred-language file sat unused.
       if (ctx) await loadExternalSubtitles(ctx, state.path!)
 
-      const subtitle = chooseSubtitleTrack(
-        mpv.getState().tracks,
-        config.preferredSubtitleLanguages,
-        config.autoEnableSubtitles
-      )
+      // Picking a subtitle by hand on one episode carries to the rest of its
+      // season — "the second option" rather than a particular track, which
+      // is per file. An episode with fewer options than that falls back to
+      // the ordinary default below, the same as a season with no choice yet.
+      const owner =
+        ctx?.library && ctx.currentKey ? findSeasonOwner(ctx.library, ctx.currentKey) : null
+      const remembered = owner ? ctx?.subtitleChoices.get(owner.seriesId, owner.season) : undefined
+      const subsInMenuOrder = mpv.getState().tracks.filter((t) => t.type === 'sub')
+      const override = applySeasonSubtitleChoice(subsInMenuOrder, remembered)
+
+      const subtitle =
+        override !== undefined
+          ? override
+          : chooseSubtitleTrack(
+              mpv.getState().tracks,
+              config.preferredSubtitleLanguages,
+              config.autoEnableSubtitles
+            )
       if (subtitle !== null) await mpv.setSubtitleTrack(subtitle)
     })().catch((error: Error) => {
       console.error(`[cassette] track selection failed:`, error.message)

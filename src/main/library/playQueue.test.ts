@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Library, MediaFile } from '@shared/types'
-import { findNext, findPrevious, flattenPlayable } from './playQueue'
+import { findNext, findPrevious, findSeasonOwner, flattenPlayable } from './playQueue'
 
 function file(key: string): MediaFile {
   return {
@@ -115,5 +115,23 @@ describe('findPrevious', () => {
 
   it('does not step back from the first episode of a later series', () => {
     expect(findPrevious(library, 'd')).toBeNull()
+  })
+})
+
+describe('findSeasonOwner', () => {
+  it('names the series and season an episode belongs to', () => {
+    expect(findSeasonOwner(library, 'a')).toEqual({ seriesId: 'mentalist', season: 3 })
+  })
+
+  it('tells one season of a series apart from another', () => {
+    expect(findSeasonOwner(library, 'c')).toEqual({ seriesId: 'mentalist', season: 4 })
+  })
+
+  it('has no season for a movie', () => {
+    expect(findSeasonOwner(library, 'm1')).toBeNull()
+  })
+
+  it('returns null for an unknown key', () => {
+    expect(findSeasonOwner(library, 'nope')).toBeNull()
   })
 })

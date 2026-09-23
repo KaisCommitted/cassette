@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { TrackInfo } from '@shared/types'
-import { chooseAudioTrack, chooseSubtitleTrack } from './trackChoice'
+import { applySeasonSubtitleChoice, chooseAudioTrack, chooseSubtitleTrack } from './trackChoice'
 
 function track(over: Partial<TrackInfo> & { id: number; type: TrackInfo['type'] }): TrackInfo {
   return { title: null, lang: null, codec: null, selected: false, externalFilename: null, ...over }
@@ -39,6 +39,23 @@ describe('chooseSubtitleTrack', () => {
     const tracks = [
       track({ id: 1, type: 'sub', lang: 'eng', title: 'Forced' }),
       track({ id: 2, type: 'sub', lang: 'eng' })
+    ]
+    expect(chooseSubtitleTrack(tracks, prefs, true)).toBe(2)
+  })
+
+  it('does not demote SDH: it is full dialogue, not a partial track', () => {
+    const tracks = [
+      track({ id: 1, type: 'sub', lang: 'eng', title: 'English (SDH)' }),
+      track({ id: 2, type: 'sub', lang: 'eng', title: 'English' })
+    ]
+    // Neither is partial, so the tie goes to the one the file lists first.
+    expect(chooseSubtitleTrack(tracks, prefs, true)).toBe(1)
+  })
+
+  it('still puts a signs-and-songs track behind an SDH one', () => {
+    const tracks = [
+      track({ id: 1, type: 'sub', lang: 'eng', title: 'Signs and Songs' }),
+      track({ id: 2, type: 'sub', lang: 'eng', title: 'English (SDH)' })
     ]
     expect(chooseSubtitleTrack(tracks, prefs, true)).toBe(2)
   })
@@ -86,5 +103,28 @@ describe('chooseAudioTrack', () => {
       track({ id: 2, type: 'audio', lang: 'eng' })
     ]
     expect(chooseAudioTrack(tracks, ['eng'])).toBe(2)
+  })
+})
+
+describe('applySeasonSubtitleChoice', () => {
+  const subs = [
+    track({ id: 10, type: 'sub', lang: 'eng', title: 'English (SDH)' }),
+    track({ id: 11, type: 'sub', lang: 'eng', title: 'English · file' })
+  ]
+
+  it('has nothing to apply when the season has no remembered choice', () => {
+    expect(applySeasonSubtitleChoice(subs, undefined)).toBeUndefined()
+  })
+
+  it('picks the track at the remembered position', () => {
+    expect(applySeasonSubtitleChoice(subs, 1)).toBe(11)
+  })
+
+  it('turns subtitles off when that was the remembered choice', () => {
+    expect(applySeasonSubtitleChoice(subs, null)).toBeNull()
+  })
+
+  it('has nothing to apply when this episode has fewer options than that', () => {
+    expect(applySeasonSubtitleChoice([subs[0]!], 1)).toBeUndefined()
   })
 })
