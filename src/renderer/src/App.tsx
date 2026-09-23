@@ -313,8 +313,6 @@ export function App() {
 
         {view.name === 'series' &&
           (series ? (
-            // Until the series screen is redesigned it brings no padding of its own.
-            <div className="page">
             <SeriesView
               series={series}
               progress={progress}
@@ -326,7 +324,6 @@ export function App() {
               onResumeSeries={resumeSeries}
               onRefreshProgress={() => void refreshProgress()}
             />
-            </div>
           ) : (
             <div className="page">
               <div className="empty-state">

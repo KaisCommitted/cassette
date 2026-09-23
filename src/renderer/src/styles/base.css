@@ -452,3 +452,10 @@ kbd {
     transform: none;
   }
 }
+
+/* Headings that take focus when a page opens are a place to start from, not
+   a control: screen readers announce them, and a ring round a title reads
+   as something to press. */
+[data-return='page-start']:focus-visible {
+  outline: none;
+}

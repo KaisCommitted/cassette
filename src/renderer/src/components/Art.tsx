@@ -209,6 +209,19 @@ export function FrameArt({ tmdb, thumbKey, title, children }: FrameArtProps) {
   )
 }
 
+/**
+ * A backdrop filling whatever box it is put in, fading in when it arrives.
+ * Renders nothing without a TMDB path: the box's own background stands in.
+ */
+export function Backdrop({ path }: { path: string | null }) {
+  const [failed, setFailed] = useState(false)
+  useEffect(() => setFailed(false), [path])
+  if (!path || failed) return null
+  return (
+    <ArtImage src={artUrl(path, 'backdrop')} className="backdrop" onFail={() => setFailed(true)} />
+  )
+}
+
 /** Watch progress along the bottom edge of a picture. */
 export function ProgressSeam({ fraction }: { fraction: number }) {
   const pct = Math.max(0, Math.min(100, fraction * 100))
