@@ -145,3 +145,62 @@ export function formatRemaining(seconds: number): string {
   const m = mins % 60
   return `${h} h ${String(m).padStart(2, '0')} left`
 }
+
+/**
+ * An episode label written out for reading rather than scanning.
+ *
+ * `S03E16` is how files name episodes; on a page it reads better as words,
+ * and the short form drops the zero padding. Anything that does not look like
+ * an episode label is passed through untouched.
+ */
+export function episodeLabel(label: string, form: 'long' | 'short'): string {
+  const match = /^S(\d+)E(\d+)(?:-E(\d+))?$/i.exec(label)
+  if (!match) return label
+  const season = Number(match[1])
+  const first = Number(match[2])
+  const last = match[3] ? Number(match[3]) : null
+  if (form === 'short') {
+    return last === null ? `S${season} E${first}` : `S${season} E${first}–${last}`
+  }
+  return last === null
+    ? `Season ${season}, episode ${first}`
+    : `Season ${season}, episodes ${first}–${last}`
+}
+
+/** The library entry a playing file belongs to, by its path on disk. */
+export function keyForPath(library: Library, path: string): string | null {
+  for (const series of library.series) {
+    for (const season of series.seasons) {
+      for (const episode of season.episodes) {
+        if (episode.file.path === path) return episode.file.key
+      }
+    }
+  }
+  return library.movies.find((m) => m.file.path === path)?.file.key ?? null
+}
+
+/**
+ * Which of the four sleeve colours a title gets.
+ *
+ * Derived from the title so a tape keeps its colour between launches and
+ * rescans, and neighbours on the shelf rarely match.
+ */
+export function sleeveTone(title: string): number {
+  let hash = 0
+  for (let i = 0; i < title.length; i++) hash = (hash * 31 + title.charCodeAt(i)) | 0
+  return Math.abs(hash) % 4
+}
+
+/** "8 minutes ago", "3 hours ago", "2 days ago", or the date past a month. */
+export function formatAgo(iso: string, now: Date = new Date()): string {
+  const then = new Date(iso)
+  if (Number.isNaN(then.getTime())) return 'at an unknown time'
+  const minutes = Math.round((now.getTime() - then.getTime()) / 60000)
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return minutes === 1 ? '1 minute ago' : `${minutes} minutes ago`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return hours === 1 ? '1 hour ago' : `${hours} hours ago`
+  const days = Math.round(hours / 24)
+  if (days < 31) return days === 1 ? 'yesterday' : `${days} days ago`
+  return `on ${then.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}`
+}

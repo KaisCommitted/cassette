@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import type { Library, MediaFile, ProgressRecord } from '@shared/types'
-import { continueWatching, describeSeasons, formatRemaining, summariseSeries } from './select'
+import {
+  continueWatching,
+  describeSeasons,
+  episodeLabel,
+  formatAgo,
+  formatRemaining,
+  keyForPath,
+  sleeveTone,
+  summariseSeries
+} from './select'
 
 function file(key: string): MediaFile {
   return {
@@ -181,5 +190,61 @@ describe('continueWatching — one row per series', () => {
     ])
     const items = continueWatching(twoShows, progress)
     expect(items.map((i) => i.title)).toEqual(['Other Show', 'The Mentalist'])
+  })
+})
+
+describe('episodeLabel', () => {
+  it('writes an episode out in words', () => {
+    expect(episodeLabel('S03E16', 'long')).toBe('Season 3, episode 16')
+    expect(episodeLabel('S03E16', 'short')).toBe('S3 E16')
+  })
+
+  it('covers a file that holds two episodes', () => {
+    expect(episodeLabel('S03E23-E24', 'long')).toBe('Season 3, episodes 23–24')
+    expect(episodeLabel('S03E23-E24', 'short')).toBe('S3 E23–24')
+  })
+
+  it('leaves anything else alone', () => {
+    expect(episodeLabel('Film', 'long')).toBe('Film')
+    expect(episodeLabel('2020', 'short')).toBe('2020')
+  })
+})
+
+describe('keyForPath', () => {
+  it('finds the episode a playing file belongs to', () => {
+    expect(keyForPath(library, file('b').path)).toBe('b')
+  })
+
+  it('returns null for a file that is not in the library', () => {
+    expect(keyForPath(library, 'D:/elsewhere.mkv')).toBeNull()
+  })
+})
+
+describe('sleeveTone', () => {
+  it('gives a title the same colour every time', () => {
+    expect(sleeveTone('The Quiet Floor')).toBe(sleeveTone('The Quiet Floor'))
+  })
+
+  it('stays within the four sleeve colours', () => {
+    for (const title of ['A', 'Northern Signal', '', 'Paper & Ash', 'x'.repeat(300)]) {
+      const tone = sleeveTone(title)
+      expect(tone).toBeGreaterThanOrEqual(0)
+      expect(tone).toBeLessThan(4)
+    }
+  })
+})
+
+describe('formatAgo', () => {
+  const now = new Date('2026-09-23T12:00:00.000Z')
+
+  it('counts minutes, hours and days', () => {
+    expect(formatAgo('2026-09-23T11:52:00.000Z', now)).toBe('8 minutes ago')
+    expect(formatAgo('2026-09-23T09:00:00.000Z', now)).toBe('3 hours ago')
+    expect(formatAgo('2026-09-22T12:00:00.000Z', now)).toBe('yesterday')
+    expect(formatAgo('2026-09-20T12:00:00.000Z', now)).toBe('3 days ago')
+  })
+
+  it('says so for a missing time rather than printing NaN', () => {
+    expect(formatAgo('', now)).toBe('at an unknown time')
   })
 })

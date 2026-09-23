@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type RefObject } from 'react'
 import {
   ACTIONS,
   type BundledKeyAvailability,
   type KeyBindings,
+  type Library,
+  type MetadataSnapshot,
   type ScanProgressInfo,
   type Settings
 } from '@shared/types'
@@ -20,6 +22,10 @@ export interface SettingsViewProps {
   onChangeSettings: (changes: Partial<Settings>) => void
   scanning: boolean
   scanProgress: ScanProgressInfo | null
+  library: Library
+  metadata: MetadataSnapshot
+  scrollRoot: RefObject<HTMLElement | null>
+  onMetadata: (metadata: MetadataSnapshot) => void
 }
 
 export function SettingsView({

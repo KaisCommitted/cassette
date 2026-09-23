@@ -1,0 +1,454 @@
+/* ============ ground ============ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--ink);
+  color: var(--cream);
+  font-family: var(--font-body);
+  font-size: var(--text-md);
+  line-height: 1.5;
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+  letter-spacing: 0;
+}
+
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: default;
+}
+
+img {
+  display: block;
+}
+
+::selection {
+  background: oklch(0.752 0.118 82 / 0.35);
+}
+
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-thumb {
+  background: oklch(0.906 0.02 80 / 0.14);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: oklch(0.906 0.02 80 / 0.24);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* One focus ring everywhere: a brass outline standing off the element. */
+:focus {
+  outline: none;
+}
+:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ============ buttons ============ */
+
+/*
+ * Three weights. Primary is brass and there is at most one per screen region:
+ * it is the thing you came to press. Ghost is a quiet bordered control.
+ * Quiet has no border at all, for secondary actions beside a primary.
+ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: transparent;
+  font-size: var(--text-md);
+  font-weight: 560;
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    background-color var(--t-quick) ease,
+    border-color var(--t-quick) ease,
+    color var(--t-quick) ease,
+    transform var(--t-quick) var(--ease-out);
+}
+.btn .icon {
+  width: 18px;
+  height: 18px;
+  margin-left: -3px;
+}
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.btn:disabled {
+  opacity: 0.5;
+}
+
+.btn-primary {
+  background: var(--brass);
+  color: var(--ink);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--brass-hi);
+}
+
+.btn-ghost {
+  border-color: var(--line-strong);
+  background: oklch(0.3 0.009 70 / 0.5);
+}
+.btn-ghost:hover:not(:disabled) {
+  background: var(--raised);
+  border-color: oklch(0.906 0.02 80 / 0.3);
+}
+
+.btn-quiet {
+  color: var(--muted);
+}
+.btn-quiet:hover:not(:disabled) {
+  color: var(--cream);
+  background: oklch(0.906 0.02 80 / 0.07);
+}
+
+.btn-sm {
+  height: 30px;
+  padding: 0 11px;
+  font-size: var(--text-sm);
+}
+.btn-sm .icon {
+  width: 16px;
+  height: 16px;
+}
+.btn-lg {
+  height: 46px;
+  padding: 0 22px;
+  font-size: var(--text-lg);
+}
+
+/* Square, icon-only. Always carries an aria-label and a title. */
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--muted);
+  transition:
+    background-color var(--t-quick) ease,
+    color var(--t-quick) ease,
+    border-color var(--t-quick) ease;
+}
+.icon-btn:hover:not(:disabled) {
+  color: var(--cream);
+  background: oklch(0.906 0.02 80 / 0.08);
+}
+.icon-btn:disabled {
+  opacity: 0.4;
+}
+.icon-btn-bordered {
+  border-color: var(--line-strong);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ============ fields ============ */
+
+.input {
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: oklch(0.17 0.004 85 / 0.6);
+  color: var(--cream);
+  transition: border-color var(--t-quick) ease;
+}
+.input::placeholder {
+  color: var(--faint);
+}
+.input:hover {
+  border-color: oklch(0.906 0.02 80 / 0.3);
+}
+.input:focus-visible {
+  outline: none;
+  border-color: var(--brass);
+  box-shadow: 0 0 0 3px var(--brass-soft);
+}
+
+/* A switch, drawn on a real checkbox so it keeps its keyboard and label. */
+.switch {
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: 38px;
+  height: 22px;
+  margin: 0;
+  border-radius: 99px;
+  background: var(--raised-hi);
+  cursor: pointer;
+  transition: background-color var(--t-quick) ease;
+}
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition:
+    transform var(--t-settle) var(--ease-out),
+    background-color var(--t-quick) ease;
+}
+.switch:checked {
+  background: var(--brass);
+}
+.switch:checked::after {
+  transform: translateX(16px);
+  background: var(--ink);
+}
+
+/* Range inputs: a thin track, brass up to the thumb. */
+.range {
+  appearance: none;
+  width: 100%;
+  height: 22px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  --fill: 50%;
+}
+.range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 99px;
+  background: linear-gradient(
+    to right,
+    var(--brass) 0 var(--fill),
+    var(--raised-hi) var(--fill) 100%
+  );
+}
+.range::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: var(--cream);
+  box-shadow: 0 1px 4px oklch(0 0 0 / 0.5);
+  transition: transform var(--t-quick) var(--ease-out);
+}
+.range:hover::-webkit-slider-thumb {
+  transform: scale(1.12);
+}
+.range:focus-visible {
+  outline: none;
+}
+.range:focus-visible::-webkit-slider-thumb {
+  box-shadow: var(--focus);
+}
+
+/* A row of mutually exclusive buttons. */
+.segmented {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: calc(var(--r-md) + 3px);
+  background: oklch(0.17 0.004 85 / 0.5);
+}
+.segment {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 540;
+  transition:
+    background-color var(--t-quick) ease,
+    color var(--t-quick) ease;
+}
+.segment:hover {
+  color: var(--cream);
+}
+.segment[aria-pressed='true'] {
+  background: var(--raised);
+  color: var(--cream);
+}
+.segment-count {
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.segment[aria-pressed='true'] .segment-count {
+  color: var(--brass);
+}
+
+kbd {
+  font-family: var(--font-display);
+}
+
+/* ============ empty and loading ============ */
+
+.empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  max-width: 56ch;
+  margin: 56px auto;
+  padding: 40px 32px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-lg);
+  text-align: center;
+}
+.empty-state-tall {
+  margin-top: 12vh;
+}
+.empty-icon {
+  width: 32px;
+  height: 32px;
+  color: var(--faint);
+  margin-bottom: 4px;
+}
+.empty-title {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  line-height: 1.25;
+}
+.empty-text {
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.empty-note {
+  margin-top: 8px;
+  font-size: var(--text-xs);
+  color: var(--faint);
+}
+
+.loading-screen {
+  height: 100%;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 18px;
+  color: var(--muted);
+}
+.loading-mark {
+  height: 44px;
+  color: var(--brass);
+}
+
+/* ============ progress ============ */
+
+/* A plain bar, brass on a faint track. */
+.bar,
+.meter {
+  display: block;
+  position: relative;
+  height: 4px;
+  border-radius: 99px;
+  background: oklch(0.906 0.02 80 / 0.12);
+  overflow: hidden;
+}
+.bar > span,
+.meter > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--brass);
+  transition: width var(--t-settle) var(--ease-out);
+}
+
+/* Before the first count there is no ratio to show, so the bar sweeps. This
+   only runs while something is being waited on, never on the library. */
+.meter > .is-indeterminate,
+.scan-chip-bar > .is-indeterminate {
+  width: 30%;
+  animation: sweep 1.2s ease-in-out infinite;
+}
+@keyframes sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}
+
+/* ============ motion ============ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+  .meter > .is-indeterminate,
+  .scan-chip-bar > .is-indeterminate {
+    /* Still says "working" without sweeping. */
+    width: 100%;
+    opacity: 0.45;
+    transform: none;
+  }
+}

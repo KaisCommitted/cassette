@@ -5,7 +5,7 @@ import type {
   SeriesEntry,
   SubtitleScanResult
 } from '@shared/types'
-import { Art, PlayOverlay } from '../components/Art'
+import { FrameArt } from '../components/Art'
 import { artUrl } from '../mediaUrls'
 import { ScanLog } from '../components/ScanLog'
 import { describeSeasons, formatRemaining, summariseSeries } from '../select'
@@ -17,6 +17,9 @@ export interface SeriesViewProps {
   onBack: () => void
   onPlay: (path: string, key: string) => void
   onRefreshProgress: () => void
+  onResumeSeries: (seriesId: string) => void
+  lastPlayedKey: string | null
+  returns: number
 }
 
 export function SeriesView({
@@ -25,7 +28,8 @@ export function SeriesView({
   metadata,
   onBack,
   onPlay,
-  onRefreshProgress
+  onRefreshProgress,
+  onResumeSeries
 }: SeriesViewProps) {
   const summary = summariseSeries(series, progress)
   const seriesMeta = metadata.series[series.id]
@@ -90,7 +94,7 @@ export function SeriesView({
       <div className="series-actions">
         <button
           className="btn primary"
-          onClick={() => void window.cassette.resumeSeries(series.id)}
+          onClick={() => onResumeSeries(series.id)}
         >
           {summary.watchedCount === 0 ? 'Start watching' : 'Resume'}
         </button>
@@ -154,13 +158,11 @@ export function SeriesView({
             }}
           >
             <div className="still">
-              <Art
-                tmdbPath={meta?.stillPath ?? null}
-                kind="still"
+              <FrameArt
+                tmdb={meta?.stillPath ? { path: meta.stillPath, kind: 'still' } : null}
                 thumbKey={episode.file.key}
-                alt={episode.label}
+                title={episode.label}
               />
-              <PlayOverlay />
               {(fraction > 0 || finished) && (
                 <div
                   className={finished ? 'card-progress complete' : 'card-progress'}
