@@ -7,7 +7,14 @@
 param(
     [string]$Title = 'Cassette',
     [int]$DelayMs = 1200,
-    [string]$OutPath = (Join-Path $env:TEMP 'cassette-window.png')
+    [string]$OutPath = (Join-Path $env:TEMP 'cassette-window.png'),
+    # Actually take keyboard focus, not just raise the window. The player
+    # controls only float above the video while Cassette is the active app
+    # (bd9db54), and Windows refuses a plain SetForegroundWindow from a
+    # background process, so without this a capture of the player shows the
+    # picture with no controls. It takes focus from whatever you are typing
+    # in, which is why it is opt-in.
+    [switch]$Focus
 )
 
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
@@ -25,6 +32,14 @@ public class Win32 {
     [DllImport("user32.dll")]
     public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
     public struct RECT { public int Left, Top, Right, Bottom; }
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetDC(IntPtr hWnd);
+    [DllImport("user32.dll")]
+    public static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
+    [DllImport("user32.dll")]
+    public static extern void keybd_event(byte vk, byte scan, int flags, IntPtr extra);
+    [DllImport("gdi32.dll")]
+    public static extern bool BitBlt(IntPtr dest, int x, int y, int w, int h, IntPtr src, int sx, int sy, int rop);
 }
 '@
 
@@ -41,6 +56,11 @@ if ($null -eq $proc) {
 $hwnd = $proc.MainWindowHandle
 
 [void][Win32]::ShowWindow($hwnd, 9)   # SW_RESTORE
+if ($Focus) {
+    # A tap of Alt is what lets a background process hand focus over.
+    [Win32]::keybd_event(0x12, 0, 0, [IntPtr]::Zero)
+    [Win32]::keybd_event(0x12, 0, 2, [IntPtr]::Zero)
+}
 [void][Win32]::SetForegroundWindow($hwnd)
 Start-Sleep -Milliseconds 700
 
@@ -56,7 +76,14 @@ if ($w -le 0 -or $h -le 0) {
 function Get-Shot($x, $y, $w, $h) {
     $bmp = New-Object System.Drawing.Bitmap $w, $h
     $gfx = [System.Drawing.Graphics]::FromImage($bmp)
-    $gfx.CopyFromScreen($x, $y, 0, 0, (New-Object System.Drawing.Size $w, $h))
+    # SRCCOPY | CAPTUREBLT: the CAPTUREBLT flag includes layered windows.
+    # Without it the player controls, which are a transparent window of their
+    # own over the video, are silently left out of the picture.
+    $screen = [Win32]::GetDC([IntPtr]::Zero)
+    $dest = $gfx.GetHdc()
+    [void][Win32]::BitBlt($dest, 0, 0, $w, $h, $screen, $x, $y, 0x40CC0020)
+    $gfx.ReleaseHdc($dest)
+    [void][Win32]::ReleaseDC([IntPtr]::Zero, $screen)
     $gfx.Dispose()
     return $bmp
 }

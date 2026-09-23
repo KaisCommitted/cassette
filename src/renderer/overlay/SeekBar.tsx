@@ -53,10 +53,11 @@ export function SeekBar({ position, duration, onSeek, onActivity }: SeekBarProps
   const shown = dragging ? dragSeconds : position
   const pct = duration > 0 ? (shown / duration) * 100 : 0
   const hoverPct = hover !== null && duration > 0 ? (hover / duration) * 100 : null
+  const active = dragging || hover !== null
 
   return (
     <div
-      style={{ position: 'relative', padding: '8px 0', cursor: 'pointer' }}
+      className={active ? 'seek is-active' : 'seek'}
       onMouseDown={(e) => {
         setDragSeconds(secondsAt(e.clientX))
         setDragging(true)
@@ -65,62 +66,15 @@ export function SeekBar({ position, duration, onSeek, onActivity }: SeekBarProps
       onMouseLeave={() => setHover(null)}
     >
       {hoverPct !== null && (
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 22,
-            left: `${hoverPct}%`,
-            transform: 'translateX(-50%)',
-            background: 'rgba(8,8,11,0.94)',
-            border: '1px solid rgba(255,255,255,0.14)',
-            borderRadius: 6,
-            padding: '3px 7px',
-            fontSize: 11.5,
-            fontVariantNumeric: 'tabular-nums',
-            pointerEvents: 'none',
-            whiteSpace: 'nowrap'
-          }}
-        >
+        <div className="seek-tip" style={{ left: `${hoverPct}%` }}>
           {formatTime(hover ?? 0)}
         </div>
       )}
 
-      <div
-        ref={trackRef}
-        style={{
-          position: 'relative',
-          height: dragging || hover !== null ? 6 : 4,
-          background: 'rgba(255,255,255,0.22)',
-          borderRadius: 999,
-          transition: 'height 120ms ease'
-        }}
-      >
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            width: `${pct}%`,
-            background: '#e50914',
-            borderRadius: 999
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            top: '50%',
-            left: `${pct}%`,
-            width: 13,
-            height: 13,
-            marginLeft: -6.5,
-            marginTop: -6.5,
-            borderRadius: '50%',
-            background: '#fff',
-            boxShadow: '0 1px 4px rgba(0,0,0,0.5)',
-            opacity: dragging || hover !== null ? 1 : 0,
-            transition: 'opacity 120ms ease',
-            pointerEvents: 'none'
-          }}
-        />
+      <div className="seek-track" ref={trackRef}>
+        {hoverPct !== null && <div className="seek-hover" style={{ width: `${hoverPct}%` }} />}
+        <div className="seek-fill" style={{ width: `${pct}%` }} />
+        <div className="seek-thumb" style={{ left: `${pct}%` }} />
       </div>
     </div>
   )

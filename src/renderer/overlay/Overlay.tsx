@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PlaybackState } from '@shared/types'
 import { ControlBar } from './ControlBar'
 import { describeMouse } from './format'
+import { useNowPlaying } from './useNowPlaying'
+import { Icon, Logo } from '../shared/Icon'
 
 /** Controls fade out after this long without pointer movement. */
 const IDLE_HIDE_MS = 2600
@@ -15,6 +17,7 @@ export function Overlay() {
   useEffect(() => window.cassette.onPlaybackState(setState), [])
 
   const playing = Boolean(state?.path)
+  const nowPlaying = useNowPlaying(state?.path ?? null, state?.label ?? '')
 
   const wake = useCallback(() => {
     setVisible(true)
@@ -46,6 +49,7 @@ export function Overlay() {
 
   return (
     <div
+      className={shown ? 'osd is-shown' : 'osd'}
       onMouseDown={(e) => {
         if (e.currentTarget !== e.target) return
         send(describeMouse(e.nativeEvent))
@@ -59,53 +63,38 @@ export function Overlay() {
         send(e.deltaY < 0 ? 'mouse:wheelUp' : 'mouse:wheelDown')
       }}
       onContextMenu={(e) => e.preventDefault()}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        pointerEvents: 'auto',
-        cursor: shown ? 'default' : 'none',
-        fontFamily:
-          'Inter, "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif'
-      }}
     >
-      {state.loading && <LoadingBadge label={state.label} />}
-      <ControlBar
-        state={state}
-        shown={shown}
-        onMenuOpenChange={setMenuOpen}
-        onActivity={wake}
-      />
+      {state.loading && <LoadingScreen title={nowPlaying.title} detail={nowPlaying.detail} />}
+
+      {/* Only the button takes the pointer: the band itself lets presses
+          through to the video, where they reach the bindings as before. */}
+      <div className="osd-top">
+        <button
+          className="osd-back"
+          onClick={() => void window.cassette.stop()}
+          title="Close the player"
+        >
+          <Icon name="back-arrow" />
+          Library
+        </button>
+        <div className="osd-heading">
+          <p className="osd-series">{nowPlaying.title}</p>
+          {nowPlaying.detail && <p className="osd-episode">{nowPlaying.detail}</p>}
+        </div>
+      </div>
+
+      <ControlBar state={state} shown={shown} onMenuOpenChange={setMenuOpen} onActivity={wake} />
     </div>
   )
 }
 
-function LoadingBadge({ label }: { label: string }) {
+function LoadingScreen({ title, detail }: { title: string; detail: string | null }) {
   return (
-    <div
-      style={{
-        position: 'absolute',
-        inset: 0,
-        display: 'grid',
-        placeItems: 'center',
-        background: 'rgba(8,8,11,0.82)',
-        color: '#f4f4f6'
-      }}
-    >
-      <div style={{ textAlign: 'center' }}>
-        <div
-          style={{
-            width: 34,
-            height: 34,
-            margin: '0 auto 14px',
-            borderRadius: '50%',
-            border: '3px solid rgba(255,255,255,0.18)',
-            borderTopColor: '#e50914',
-            animation: 'cassette-spin 0.8s linear infinite'
-          }}
-        />
-        <div style={{ fontSize: 14, letterSpacing: 0.2, opacity: 0.85 }}>{label}</div>
-      </div>
-      <style>{`@keyframes cassette-spin { to { transform: rotate(360deg) } }`}</style>
+    <div className="osd-loading" role="status">
+      <Logo variant="mark" className="osd-loading-mark" />
+      <span className="osd-spinner" aria-hidden="true" />
+      <p className="osd-loading-title">{title}</p>
+      {detail && <p className="osd-loading-detail">{detail}</p>}
     </div>
   )
 }

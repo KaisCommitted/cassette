@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Icon } from '../shared/Icon'
 
 export interface TrackMenuItem {
   id: string
@@ -10,80 +11,50 @@ export interface TrackMenuProps {
   title: string
   items: TrackMenuItem[]
   onPick: (id: string) => void
+  onClose: () => void
   footer?: ReactNode
+  /** A line of state above the items, e.g. a timer that is running. */
+  note?: string | null
+  /** Short choices, like speeds, sit in a grid rather than a list. */
+  layout?: 'list' | 'grid'
 }
 
-export function TrackMenu({ title, items, onPick, footer }: TrackMenuProps) {
+export function TrackMenu({
+  title,
+  items,
+  onPick,
+  onClose,
+  footer,
+  note,
+  layout = 'list'
+}: TrackMenuProps) {
   return (
-    <div
-      style={{
-        position: 'absolute',
-        right: 28,
-        bottom: 74,
-        minWidth: 232,
-        maxHeight: 320,
-        overflowY: 'auto',
-        background: 'rgba(16,16,20,0.97)',
-        border: '1px solid rgba(255,255,255,0.12)',
-        borderRadius: 10,
-        boxShadow: '0 12px 34px rgba(0,0,0,0.5)',
-        overflowX: 'hidden'
-      }}
-    >
-      <div
-        style={{
-          padding: '10px 12px 6px',
-          fontSize: 11,
-          letterSpacing: 0.7,
-          textTransform: 'uppercase',
-          opacity: 0.55
-        }}
-      >
-        {title}
+    <div className="osd-menu" role="dialog" aria-label={title}>
+      <div className="osd-menu-head">
+        <h2 className="osd-menu-title">{title}</h2>
+        <button className="osd-small" onClick={onClose} aria-label="Close" title="Close">
+          <Icon name="close" />
+        </button>
       </div>
 
+      {note && <p className="osd-menu-note">{note}</p>}
+
       {items.length === 0 ? (
-        <div style={{ padding: '8px 12px 14px', fontSize: 12.5, opacity: 0.6 }}>
-          None available
-        </div>
+        <p className="osd-menu-empty">None available</p>
       ) : (
-        items.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => onPick(item.id)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 9,
-              width: '100%',
-              textAlign: 'left',
-              padding: '9px 12px',
-              border: 0,
-              background: 'transparent',
-              color: '#f4f4f6',
-              fontSize: 13,
-              fontFamily: 'inherit',
-              cursor: 'pointer'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.09)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'transparent'
-            }}
-          >
-            <span style={{ width: 13, color: '#e50914' }}>{item.selected ? '●' : ''}</span>
-            <span
-              style={{
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap'
-              }}
+        <div className={layout === 'grid' ? 'osd-menu-items is-grid' : 'osd-menu-items'}>
+          {items.map((item) => (
+            <button
+              key={item.id}
+              className={item.selected ? 'osd-menu-item is-selected' : 'osd-menu-item'}
+              aria-pressed={item.selected}
+              onClick={() => onPick(item.id)}
             >
-              {item.label}
-            </span>
-          </button>
-        ))
+              <span className="osd-menu-label">{item.label}</span>
+              {item.selected && layout === 'list' && <Icon name="tick" />}
+            </button>
+          ))}
+        </div>
       )}
 
       {footer}

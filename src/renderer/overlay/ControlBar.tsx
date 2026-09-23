@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import type { PlaybackState } from '@shared/types'
 import { formatTime, trackLabel } from './format'
 import { SeekBar } from './SeekBar'
 import { TrackMenu } from './TrackMenu'
+import { Icon, type IconName } from '../shared/Icon'
 
 export interface ControlBarProps {
   state: PlaybackState
@@ -15,14 +16,8 @@ type MenuId = 'subs' | 'audio' | 'speed' | 'sleep' | null
 
 const api = window.cassette
 
-export function ControlBar({
-  state,
-  shown,
-  onMenuOpenChange,
-  onActivity
-}: ControlBarProps) {
+export function ControlBar({ state, shown, onMenuOpenChange, onActivity }: ControlBarProps) {
   const [menu, setMenu] = useState<MenuId>(null)
-  const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => onMenuOpenChange(menu !== null), [menu, onMenuOpenChange])
 
@@ -35,31 +30,17 @@ export function ControlBar({
   // polls the cursor: this window is click-through and non-focusable, so its
   // own enter/leave events are not reliable enough to gate that on.
   const leave = useCallback(() => setMenu(null), [])
+  const toggle = (id: Exclude<MenuId, null>): void => setMenu(menu === id ? null : id)
 
   const subs = state.tracks.filter((t) => t.type === 'sub')
   const audio = state.tracks.filter((t) => t.type === 'audio')
 
   return (
-    <div
-      ref={ref}
-      onMouseLeave={leave}
-      onMouseMove={onActivity}
-      style={{
-        position: 'absolute',
-        left: 0,
-        right: 0,
-        bottom: 0,
-        padding: '56px 28px 20px',
-        background:
-          'linear-gradient(transparent, rgba(6,6,9,0.55) 38%, rgba(6,6,9,0.94))',
-        color: '#f4f4f6',
-        pointerEvents: shown ? 'auto' : 'none',
-        opacity: shown ? 1 : 0,
-        transform: shown ? 'translateY(0)' : 'translateY(14px)',
-        transition: 'opacity 180ms ease, transform 180ms ease'
-      }}
-    >
-      <div style={{ fontSize: 15, fontWeight: 560, marginBottom: 12 }}>{state.label}</div>
+    <div className="osd-bar" onMouseLeave={leave} onMouseMove={onActivity}>
+      <div className="osd-times">
+        <span>{formatTime(state.positionSeconds)}</span>
+        <span className="osd-times-end">{formatTime(state.durationSeconds)}</span>
+      </div>
 
       <SeekBar
         position={state.positionSeconds}
@@ -68,90 +49,98 @@ export function ControlBar({
         onActivity={onActivity}
       />
 
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          marginTop: 10
-        }}
-      >
-        <IconButton
-          label={state.paused ? 'Play' : 'Pause'}
-          onClick={() => void api.togglePause()}
-        >
-          {state.paused ? <PlayIcon /> : <PauseIcon />}
-        </IconButton>
+      <div className="osd-controls">
+        <div className="osd-group">
+          <Control icon="back-10s" label="Back 10 seconds" onClick={() => void api.seekRelative(-10)} />
+          <Control
+            icon={state.paused ? 'play' : 'pause'}
+            label={state.paused ? 'Play' : 'Pause'}
+            primary
+            onClick={() => void api.togglePause()}
+          />
+          <Control
+            icon="forward-30s"
+            label="Forward 30 seconds"
+            onClick={() => void api.seekRelative(30)}
+          />
+        </div>
 
-        <IconButton
-          label="Previous episode"
-          disabled={!state.hasPrevious}
-          onClick={() => void api.previousEpisode()}
-        >
-          <SkipIcon direction="back" />
-        </IconButton>
-
-        <IconButton
-          label="Next episode"
-          disabled={!state.hasNext}
-          onClick={() => void api.nextEpisode()}
-        >
-          <SkipIcon direction="forward" />
-        </IconButton>
+        <div className="osd-group">
+          <Control
+            icon="previous"
+            label="Previous episode"
+            disabled={!state.hasPrevious}
+            onClick={() => void api.previousEpisode()}
+          />
+          <Control
+            icon="next"
+            label="Next episode"
+            disabled={!state.hasNext}
+            onClick={() => void api.nextEpisode()}
+          />
+        </div>
 
         <VolumeControl state={state} />
 
-        <div
-          style={{
-            marginLeft: 8,
-            fontSize: 12.5,
-            fontVariantNumeric: 'tabular-nums',
-            opacity: 0.82
-          }}
-        >
-          {formatTime(state.positionSeconds)}
-          <span style={{ opacity: 0.45 }}> / {formatTime(state.durationSeconds)}</span>
+        <div className="osd-spacer" />
+
+        <div className="osd-pills">
+          {state.subtitleDelayMs !== 0 && (
+            <Pill>
+              Subtitles {state.subtitleDelayMs > 0 ? '+' : ''}
+              {state.subtitleDelayMs} ms
+            </Pill>
+          )}
+          {state.speed !== 1 && <Pill>{formatSpeed(state.speed)}</Pill>}
+          {state.sleepRemainingSeconds !== null && (
+            <Pill icon="sleep-timer">Pauses in {formatCountdown(state.sleepRemainingSeconds)}</Pill>
+          )}
+          {state.sleepAfterEpisode && <Pill icon="sleep-timer">Stops after this episode</Pill>}
         </div>
 
-        <div style={{ flex: 1 }} />
-
-        {state.subtitleDelayMs !== 0 && (
-          <Pill>
-            Sub {state.subtitleDelayMs > 0 ? '+' : ''}
-            {state.subtitleDelayMs} ms
-          </Pill>
-        )}
-        {state.speed !== 1 && <Pill>{state.speed.toFixed(2)}×</Pill>}
-        {state.sleepRemainingSeconds !== null && (
-          <Pill>Sleep in {formatCountdown(state.sleepRemainingSeconds)}</Pill>
-        )}
-        {state.sleepAfterEpisode && <Pill>Stops after this episode</Pill>}
-
-        <TextButton active={menu === 'subs'} onClick={() => setMenu(menu === 'subs' ? null : 'subs')}>
-          Subtitles
-        </TextButton>
-        <TextButton active={menu === 'audio'} onClick={() => setMenu(menu === 'audio' ? null : 'audio')}>
-          Audio
-        </TextButton>
-        <TextButton active={menu === 'speed'} onClick={() => setMenu(menu === 'speed' ? null : 'speed')}>
-          Speed
-        </TextButton>
-        <TextButton active={menu === 'sleep'} onClick={() => setMenu(menu === 'sleep' ? null : 'sleep')}>
-          Sleep
-        </TextButton>
-
-        <IconButton label="Fullscreen" onClick={() => void api.toggleFullscreen()}>
-          <FullscreenIcon on={state.fullscreen} />
-        </IconButton>
-
-        <IconButton label="Close player" onClick={() => void api.stop()}>
-          <CloseIcon />
-        </IconButton>
+        <div className="osd-group">
+          <Control
+            icon="subtitles"
+            label="Subtitles"
+            active={menu === 'subs'}
+            expanded={menu === 'subs'}
+            onClick={() => toggle('subs')}
+          />
+          <Control
+            icon="audio-track"
+            label="Audio"
+            active={menu === 'audio'}
+            expanded={menu === 'audio'}
+            onClick={() => toggle('audio')}
+          />
+          <Control
+            icon="speed"
+            label="Speed"
+            active={menu === 'speed' || state.speed !== 1}
+            expanded={menu === 'speed'}
+            onClick={() => toggle('speed')}
+          />
+          <Control
+            icon="sleep-timer"
+            label="Sleep timer"
+            active={
+              menu === 'sleep' || state.sleepRemainingSeconds !== null || state.sleepAfterEpisode
+            }
+            expanded={menu === 'sleep'}
+            onClick={() => toggle('sleep')}
+          />
+          <Control
+            icon={state.fullscreen ? 'fullscreen-exit' : 'fullscreen'}
+            label={state.fullscreen ? 'Leave fullscreen' : 'Fullscreen'}
+            onClick={() => void api.toggleFullscreen()}
+          />
+        </div>
       </div>
 
       {menu === 'subs' && (
         <TrackMenu
           title="Subtitles"
+          onClose={() => setMenu(null)}
           items={[
             { id: 'off', label: 'Off', selected: state.subtitleTrackId === null },
             ...subs.map((t) => ({
@@ -166,11 +155,11 @@ export function ControlBar({
           }}
           footer={
             <>
-              <SubtitleSearch />
               <DelayAdjuster
                 valueMs={state.subtitleDelayMs}
                 onChange={(ms) => void api.setSubtitleDelay(ms)}
               />
+              <SubtitleSearch />
             </>
           }
         />
@@ -179,6 +168,7 @@ export function ControlBar({
       {menu === 'audio' && (
         <TrackMenu
           title="Audio"
+          onClose={() => setMenu(null)}
           items={audio.map((t) => ({
             id: String(t.id),
             label: trackLabel(t),
@@ -191,9 +181,34 @@ export function ControlBar({
         />
       )}
 
+      {menu === 'speed' && (
+        <TrackMenu
+          title="Speed"
+          layout="grid"
+          onClose={() => setMenu(null)}
+          items={[0.5, 0.75, 1, 1.25, 1.5, 2].map((s) => ({
+            id: String(s),
+            label: s === 1 ? 'Normal' : formatSpeed(s),
+            selected: Math.abs(state.speed - s) < 0.01
+          }))}
+          onPick={(id) => {
+            void api.setSpeed(Number(id))
+            setMenu(null)
+          }}
+        />
+      )}
+
       {menu === 'sleep' && (
         <TrackMenu
           title="Pause playback in"
+          onClose={() => setMenu(null)}
+          note={
+            state.sleepRemainingSeconds !== null
+              ? `Pausing in ${formatCountdown(state.sleepRemainingSeconds)}`
+              : state.sleepAfterEpisode
+                ? 'Stopping after this episode'
+                : null
+          }
           items={[
             ...[15, 30, 45, 60, 90, 120].map((mins) => ({
               id: String(mins * 60),
@@ -205,7 +220,11 @@ export function ControlBar({
               label: 'At the end of this episode',
               selected: state.sleepAfterEpisode
             },
-            { id: 'off', label: 'Cancel timer', selected: state.sleepRemainingSeconds === null && !state.sleepAfterEpisode }
+            {
+              id: 'off',
+              label: 'Cancel timer',
+              selected: state.sleepRemainingSeconds === null && !state.sleepAfterEpisode
+            }
           ]}
           onPick={(id) => {
             if (id === 'episode') void api.setSleepAfterEpisode()
@@ -215,42 +234,30 @@ export function ControlBar({
           }}
         />
       )}
-
-      {menu === 'speed' && (
-        <TrackMenu
-          title="Speed"
-          items={[0.5, 0.75, 1, 1.25, 1.5, 2].map((s) => ({
-            id: String(s),
-            label: s === 1 ? 'Normal' : `${s}×`,
-            selected: Math.abs(state.speed - s) < 0.01
-          }))}
-          onPick={(id) => {
-            void api.setSpeed(Number(id))
-            setMenu(null)
-          }}
-        />
-      )}
     </div>
   )
 }
 
 function VolumeControl({ state }: { state: PlaybackState }) {
+  const value = state.muted ? 0 : state.volume
+  const silent = state.muted || state.volume === 0
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 4 }}>
-      <IconButton
+    <div className="osd-volume">
+      <Control
+        icon={silent ? 'mute' : 'volume'}
         label={state.muted ? 'Unmute' : 'Mute'}
         onClick={() => void api.toggleMute()}
-      >
-        <VolumeIcon muted={state.muted || state.volume === 0} />
-      </IconButton>
+      />
       <input
         type="range"
+        className="osd-range"
         min={0}
         max={130}
-        value={state.muted ? 0 : state.volume}
+        value={value}
+        style={{ '--fill': `${(value / 130) * 100}%` } as CSSProperties}
         onChange={(e) => void api.setVolume(Number(e.target.value))}
         aria-label="Volume"
-        style={{ width: 84, accentColor: '#e50914', cursor: 'pointer' }}
+        title={`Volume ${Math.round(value)}%`}
       />
     </div>
   )
@@ -283,284 +290,94 @@ function SubtitleSearch() {
   }
 
   return (
-    <div
-      style={{
-        padding: '9px 12px',
-        borderTop: '1px solid rgba(255,255,255,0.09)'
-      }}
-    >
-      <button
-        onClick={run}
-        disabled={status === 'searching'}
-        style={{
-          width: '100%',
-          border: '1px solid rgba(255,255,255,0.16)',
-          borderRadius: 6,
-          padding: '6px 8px',
-          fontSize: 12,
-          fontFamily: 'inherit',
-          background: 'transparent',
-          color: '#f4f4f6',
-          cursor: status === 'searching' ? 'default' : 'pointer'
-        }}
-      >
+    <div className="osd-menu-section">
+      <button className="osd-menu-action" onClick={run} disabled={status === 'searching'}>
+        <Icon name="search" />
         {status === 'searching' ? 'Searching…' : 'Find subtitles online'}
       </button>
       {status !== 'idle' && status !== 'searching' && (
-        <div style={{ marginTop: 6, fontSize: 11.5, opacity: 0.62 }}>{status}</div>
+        <p className="osd-menu-status" role="status">
+          {status}
+        </p>
       )}
     </div>
   )
 }
 
-function DelayAdjuster({
-  valueMs,
-  onChange
-}: {
-  valueMs: number
-  onChange: (ms: number) => void
-}) {
+function DelayAdjuster({ valueMs, onChange }: { valueMs: number; onChange: (ms: number) => void }) {
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 10,
-        padding: '10px 12px',
-        borderTop: '1px solid rgba(255,255,255,0.09)'
-      }}
-    >
-      <span style={{ fontSize: 12, opacity: 0.7 }}>Delay</span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <SmallButton onClick={() => onChange(valueMs - 50)}>−50 ms</SmallButton>
-        <span
-          style={{
-            fontSize: 12,
-            minWidth: 58,
-            textAlign: 'center',
-            fontVariantNumeric: 'tabular-nums'
-          }}
-        >
-          {valueMs > 0 ? '+' : ''}
-          {valueMs} ms
-        </span>
-        <SmallButton onClick={() => onChange(valueMs + 50)}>+50 ms</SmallButton>
-      </div>
+    <div className="osd-menu-section osd-delay">
+      <span className="osd-delay-label">Delay</span>
+      <button
+        className="osd-small"
+        onClick={() => onChange(valueMs - 50)}
+        aria-label="Subtitles 50 ms earlier"
+        title="50 ms earlier"
+      >
+        <Icon name="minus" />
+      </button>
+      <span className="osd-delay-value">
+        {valueMs > 0 ? '+' : ''}
+        {valueMs} ms
+      </span>
+      <button
+        className="osd-small"
+        onClick={() => onChange(valueMs + 50)}
+        aria-label="Subtitles 50 ms later"
+        title="50 ms later"
+      >
+        <Icon name="plus" />
+      </button>
     </div>
   )
 }
 
-function IconButton({
-  children,
+function Control({
+  icon,
   label,
   onClick,
-  disabled
+  disabled,
+  primary,
+  active,
+  expanded
 }: {
-  children: React.ReactNode
+  icon: IconName
   label: string
   onClick: () => void
   disabled?: boolean
+  primary?: boolean
+  active?: boolean
+  expanded?: boolean
 }) {
+  const classes = ['osd-btn']
+  if (primary) classes.push('is-primary')
+  if (active) classes.push('is-active')
   return (
     <button
+      className={classes.join(' ')}
       onClick={onClick}
       disabled={disabled}
       title={label}
       aria-label={label}
-      style={{
-        display: 'grid',
-        placeItems: 'center',
-        width: 34,
-        height: 34,
-        border: 0,
-        borderRadius: 8,
-        background: 'transparent',
-        color: '#f4f4f6',
-        opacity: disabled ? 0.28 : 0.9,
-        cursor: disabled ? 'default' : 'pointer'
-      }}
-      onMouseEnter={(e) => {
-        if (!disabled) e.currentTarget.style.background = 'rgba(255,255,255,0.12)'
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = 'transparent'
-      }}
+      aria-expanded={expanded}
     >
-      {children}
+      <Icon name={icon} />
     </button>
   )
 }
 
-function TextButton({
-  children,
-  onClick,
-  active
-}: {
-  children: React.ReactNode
-  onClick: () => void
-  active: boolean
-}) {
+function Pill({ children, icon }: { children: ReactNode; icon?: IconName }) {
   return (
-    <button
-      onClick={onClick}
-      style={{
-        border: 0,
-        borderRadius: 7,
-        padding: '7px 11px',
-        fontSize: 12.5,
-        fontFamily: 'inherit',
-        background: active ? 'rgba(255,255,255,0.16)' : 'transparent',
-        color: '#f4f4f6',
-        opacity: active ? 1 : 0.85,
-        cursor: 'pointer'
-      }}
-    >
-      {children}
-    </button>
-  )
-}
-
-function SmallButton({
-  children,
-  onClick
-}: {
-  children: React.ReactNode
-  onClick: () => void
-}) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        border: '1px solid rgba(255,255,255,0.16)',
-        borderRadius: 6,
-        padding: '4px 8px',
-        fontSize: 11.5,
-        fontFamily: 'inherit',
-        background: 'transparent',
-        color: '#f4f4f6',
-        cursor: 'pointer'
-      }}
-    >
-      {children}
-    </button>
-  )
-}
-
-function Pill({ children }: { children: React.ReactNode }) {
-  return (
-    <span
-      style={{
-        fontSize: 11.5,
-        padding: '4px 9px',
-        borderRadius: 999,
-        background: 'rgba(255,255,255,0.13)',
-        marginRight: 4,
-        fontVariantNumeric: 'tabular-nums'
-      }}
-    >
+    <span className="osd-pill">
+      {icon && <Icon name={icon} />}
       {children}
     </span>
   )
 }
 
-/* Icons kept inline as SVG: no icon font to load, and they inherit colour. */
-
-function PlayIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M8 5.2v13.6a.6.6 0 0 0 .92.5l10.6-6.8a.6.6 0 0 0 0-1l-10.6-6.8A.6.6 0 0 0 8 5.2Z" />
-    </svg>
-  )
+function formatSpeed(speed: number): string {
+  return `${Number(speed.toFixed(2))}×`
 }
-
-function PauseIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
-      <rect x="6.5" y="5" width="4" height="14" rx="1.2" />
-      <rect x="13.5" y="5" width="4" height="14" rx="1.2" />
-    </svg>
-  )
-}
-
-function SkipIcon({ direction }: { direction: 'back' | 'forward' }) {
-  return (
-    <svg
-      width="17"
-      height="17"
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      style={{ transform: direction === 'back' ? 'scaleX(-1)' : undefined }}
-    >
-      <path d="M5 5.6v12.8a.6.6 0 0 0 .93.5l9.2-6.4a.6.6 0 0 0 0-1l-9.2-6.4a.6.6 0 0 0-.93.5Z" />
-      <rect x="16.6" y="5" width="2.6" height="14" rx="1.1" />
-    </svg>
-  )
-}
-
-function VolumeIcon({ muted }: { muted: boolean }) {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M4 9.5h3.4L12 5.6a.6.6 0 0 1 1 .46v11.9a.6.6 0 0 1-1 .46L7.4 14.5H4a.6.6 0 0 1-.6-.6v-3.8a.6.6 0 0 1 .6-.6Z" />
-      {muted ? (
-        <path
-          d="M16 9.5l4.5 5M20.5 9.5l-4.5 5"
-          stroke="currentColor"
-          strokeWidth="1.7"
-          strokeLinecap="round"
-          fill="none"
-        />
-      ) : (
-        <path
-          d="M16.2 9.2a4 4 0 0 1 0 5.6M18.6 7a7.2 7.2 0 0 1 0 10"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          fill="none"
-        />
-      )}
-    </svg>
-  )
-}
-
-function FullscreenIcon({ on }: { on: boolean }) {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      {on ? (
-        <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" />
-      ) : (
-        <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
-      )}
-    </svg>
-  )
-}
-
-function CloseIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-    >
-      <path d="M6 6l12 12M18 6L6 18" />
-    </svg>
-  )
-}
-
-
 
 /** "1:29:58" while a sleep timer counts down. */
 function formatCountdown(seconds: number): string {
