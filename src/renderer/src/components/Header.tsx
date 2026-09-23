@@ -6,6 +6,8 @@ export interface HeaderProps {
   current: 'library' | 'settings'
   query: string
   onQueryChange: (query: string) => void
+  /** Steps back one screen; null on the library, which has nowhere to go back to. */
+  onBack: (() => void) | null
   onLibrary: () => void
   onSettings: () => void
   scanning: boolean
@@ -15,15 +17,30 @@ export interface HeaderProps {
 }
 
 /**
- * The bar across the top: the mark, the two places, and search.
+ * The bar across the top: back, the mark, search, and settings.
  *
- * Search lives here rather than on the library page so it is one keystroke
- * away from anywhere — typing from a series or from settings takes you to the
- * results. A scan running in the background shows here too, since it can be
- * started from settings and outlast your visit there.
+ * There are only two places to be — the library and settings — so they are
+ * not spelled out as tabs. The mark is the way home, as it is on most things
+ * with a mark; settings is a cog in the corner, where people look for it; and
+ * Back sits first, wherever you are, so leaving a series or settings is the
+ * same move every time. That leaves the middle to search, which is what the
+ * bar is for once you are past the first screen.
+ *
+ * A scan or an artwork lookup running in the background shows here too, since
+ * either can outlast the screen it was started from.
  */
 export const Header = forwardRef<HTMLInputElement, HeaderProps>(function Header(
-  { current, query, onQueryChange, onLibrary, onSettings, scanning, scanProgress, artwork },
+  {
+    current,
+    query,
+    onQueryChange,
+    onBack,
+    onLibrary,
+    onSettings,
+    scanning,
+    scanProgress,
+    artwork
+  },
   searchRef
 ) {
   // A lookup where every title is already known finishes in a blink; saying
@@ -41,31 +58,54 @@ export const Header = forwardRef<HTMLInputElement, HeaderProps>(function Header(
 
   return (
     <header className="topbar">
-      <button className="brand" onClick={onLibrary} aria-label="Cassette, go to the library">
-        <Logo variant="mark" className="brand-mark" />
-        <Logo variant="wordmark" className="brand-word" />
-      </button>
-
-      <nav className="nav" aria-label="Main">
-        {/* `rail-link` is what the automated capture (src/main/testCapture.ts)
-            looks for to move between screens, so the name outlives the rail. */}
+      <div className="topbar-start">
+        {onBack && (
+          <button
+            className="icon-btn topbar-back"
+            onClick={onBack}
+            aria-label="Back"
+            title="Back (Esc)"
+          >
+            <Icon name="back-arrow" />
+          </button>
+        )}
+        {/* \`rail-link\` and the hidden label are what the automated capture
+            (src/main/testCapture.ts) looks for to move between screens. */}
         <button
-          className="rail-link nav-link"
-          aria-current={current === 'library' ? 'page' : undefined}
+          className="brand rail-link"
           onClick={onLibrary}
+          aria-current={current === 'library' ? 'page' : undefined}
+          title="Library"
         >
-          <Icon name="library" />
-          Library
+          <span className="visually-hidden">Library</span>
+          <Logo variant="mark" className="brand-mark" />
+          <Logo variant="wordmark" className="brand-word" />
         </button>
-        <button
-          className="rail-link nav-link"
-          aria-current={current === 'settings' ? 'page' : undefined}
-          onClick={onSettings}
-        >
-          <Icon name="settings" />
-          Settings
-        </button>
-      </nav>
+      </div>
+
+      <label className="searchbox">
+        <Icon name="search" />
+        <input
+          ref={searchRef}
+          type="search"
+          value={query}
+          placeholder="Search your library"
+          aria-label="Search your library"
+          aria-keyshortcuts="/ Control+F"
+          spellCheck={false}
+          onChange={(e) => onQueryChange(e.target.value)}
+          onKeyDown={(e) => {
+            // Escape empties the box first, then lets go of it.
+            if (e.key !== 'Escape') return
+            e.stopPropagation()
+            if (query) onQueryChange('')
+            else e.currentTarget.blur()
+          }}
+        />
+        <kbd className="searchbox-hint" aria-hidden="true">
+          /
+        </kbd>
+      </label>
 
       <div className="topbar-end">
         {!scanning && artworkShown && artwork && (
@@ -99,29 +139,15 @@ export const Header = forwardRef<HTMLInputElement, HeaderProps>(function Header(
           </button>
         )}
 
-        <label className="searchbox">
-          <Icon name="search" />
-          <input
-            ref={searchRef}
-            type="search"
-            value={query}
-            placeholder="Search your library"
-            aria-label="Search your library"
-            aria-keyshortcuts="/ Control+F"
-            spellCheck={false}
-            onChange={(e) => onQueryChange(e.target.value)}
-            onKeyDown={(e) => {
-              // Escape empties the box first, then lets go of it.
-              if (e.key !== 'Escape') return
-              e.stopPropagation()
-              if (query) onQueryChange('')
-              else e.currentTarget.blur()
-            }}
-          />
-          <kbd className="searchbox-hint" aria-hidden="true">
-            /
-          </kbd>
-        </label>
+        <button
+          className="icon-btn topbar-settings rail-link"
+          onClick={onSettings}
+          aria-current={current === 'settings' ? 'page' : undefined}
+          title="Settings"
+        >
+          <span className="visually-hidden">Settings</span>
+          <Icon name="settings" />
+        </button>
       </div>
     </header>
   )

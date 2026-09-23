@@ -73,17 +73,28 @@ export class MetadataStore {
       onProgress?.({ done, total, current: series.title })
       done++
 
-      if (!force && this.data.series[series.id]) continue
-
-      const match = await client.findSeries(series.title, series.year)
+      /*
+       * A series already matched is not looked up again, but its episodes
+       * still are, season by season, wherever any are missing. Episodes are
+       * added to a folder long after the series was first matched — a new
+       * season downloaded — and skipping the whole series once it was known
+       * left every later season showing "S6 E1" instead of its titles.
+       */
+      const known = force ? undefined : this.data.series[series.id]
+      const match = known ?? (await client.findSeries(series.title, series.year))
       if (!match) continue
-      this.data.series[series.id] = match
-      fetched++
+      if (!known) {
+        this.data.series[series.id] = match
+        fetched++
+      }
 
       // One request per season covers every episode in it.
       for (const season of series.seasons) {
         if (season.season === 0) continue
+        const missing = season.episodes.some((e) => !this.data.episodes[e.file.key])
+        if (known && !missing) continue
         const episodes = await client.season(match.tmdbId, season.season)
+        if (known && episodes.length > 0) fetched++
         for (const entry of season.episodes) {
           const number = entry.episodes[0]
           if (number === undefined) continue

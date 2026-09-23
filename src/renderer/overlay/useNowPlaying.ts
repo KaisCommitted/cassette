@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
-import { episodeLabel } from '../src/select'
+import { episodeLabel, episodeTitleFromFile } from '../src/select'
 
 export interface NowPlaying {
   /** The series or film, by its TMDB title where there is one. */
   title: string
   /** "S3 E16 · Red Queen" for an episode; the year for a film. */
   detail: string | null
+  /** True for an episode, whose series is where closing the player goes. */
+  isEpisode: boolean
 }
 
 /**
@@ -34,11 +36,16 @@ export function useNowPlaying(path: string | null, label: string): NowPlaying {
           const episode = season.episodes.find((e) => e.file.path === path)
           if (!episode) continue
           const title = metadata.series[series.id]?.title ?? series.title
-          const episodeTitle = metadata.episodes[episode.file.key]?.title
+          const episodeTitle =
+            metadata.episodes[episode.file.key]?.title || episodeTitleFromFile(episode.file.path)
           const where = episodeLabel(episode.label, 'short')
           setKnown({
             path,
-            value: { title, detail: episodeTitle ? `${where} · ${episodeTitle}` : where }
+            value: {
+              title,
+              detail: episodeTitle ? `${where} · ${episodeTitle}` : where,
+              isEpisode: true
+            }
           })
           return
         }
@@ -49,7 +56,7 @@ export function useNowPlaying(path: string | null, label: string): NowPlaying {
         const year = meta?.year ?? movie.year
         setKnown({
           path,
-          value: { title: meta?.title ?? movie.title, detail: year ? String(year) : null }
+          value: { title: meta?.title ?? movie.title, detail: year ? String(year) : null, isEpisode: false }
         })
       }
     })().catch(() => undefined)
@@ -60,5 +67,9 @@ export function useNowPlaying(path: string | null, label: string): NowPlaying {
 
   if (known && known.path === path) return known.value
   const [title, detail] = label.split(' — ')
-  return { title: title || label, detail: detail ? episodeLabel(detail, 'short') : null }
+  return {
+    title: title || label,
+    detail: detail ? episodeLabel(detail, 'short') : null,
+    isEpisode: Boolean(detail)
+  }
 }

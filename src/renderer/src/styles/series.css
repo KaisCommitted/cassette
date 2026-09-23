@@ -50,15 +50,10 @@
   align-items: flex-start;
   max-width: 76ch;
 }
-.back-btn {
-  position: absolute;
-  top: 22px;
-  left: var(--gutter);
-}
 .series-meta {
   color: var(--muted);
   font-size: var(--text-sm);
-  margin-top: 64px;
+  margin-top: 40px;
 }
 .series-title {
   margin-top: 6px;

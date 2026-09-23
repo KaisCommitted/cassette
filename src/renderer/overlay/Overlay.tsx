@@ -72,17 +72,27 @@ export function Overlay() {
       {/* Only the button takes the pointer: the band itself lets presses
           through to the video, where they reach the bindings as before. */}
       <div className="osd-top">
+        {/* Says where it goes: an episode's series, or the library for a
+            film. Escape does the same, once out of fullscreen. */}
         <button
           className="osd-back"
           onClick={() => void window.cassette.stop()}
-          title="Close the player"
+          title="Close the player (Esc)"
         >
           <Icon name="back-arrow" />
-          Library
+          <span className="osd-back-label">{nowPlaying.isEpisode ? nowPlaying.title : 'Library'}</span>
         </button>
+        {/* The back button already names the series, so an episode shows only
+            itself here; a film shows its title with the year above. */}
         <div className="osd-heading">
-          <p className="osd-series">{nowPlaying.title}</p>
-          {nowPlaying.detail && <p className="osd-episode">{nowPlaying.detail}</p>}
+          {nowPlaying.isEpisode ? (
+            <p className="osd-episode osd-episode-only">{nowPlaying.detail}</p>
+          ) : (
+            <>
+              {nowPlaying.detail && <p className="osd-series">{nowPlaying.detail}</p>}
+              <p className="osd-episode">{nowPlaying.title}</p>
+            </>
+          )}
         </div>
       </div>
 

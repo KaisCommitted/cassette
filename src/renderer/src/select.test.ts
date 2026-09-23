@@ -4,6 +4,7 @@ import {
   continueWatching,
   describeSeasons,
   episodeLabel,
+  episodeTitleFromFile,
   formatAgo,
   formatRemaining,
   keyForPath,
@@ -246,5 +247,22 @@ describe('formatAgo', () => {
 
   it('says so for a missing time rather than printing NaN', () => {
     expect(formatAgo('', now)).toBe('at an unknown time')
+  })
+})
+
+describe('episodeTitleFromFile', () => {
+  it('reads the title after the episode number', () => {
+    expect(episodeTitleFromFile('C:\\TV\\The Mentalist S06E01 The Desert Rose.mkv')).toBe('The Desert Rose')
+    expect(episodeTitleFromFile('/tv/The Mentalist S06E02 Black-Winged Redbird.mkv')).toBe('Black-Winged Redbird')
+  })
+
+  it('stops at release tags and turns dots into spaces', () => {
+    expect(episodeTitleFromFile('Show.S01E03.The.Long.Night.1080p.WEB-DL.x264.mkv')).toBe('The Long Night')
+  })
+
+  it('gives nothing when the file names no title', () => {
+    expect(episodeTitleFromFile('Show.S01E03.1080p.WEB-DL.mkv')).toBeNull()
+    expect(episodeTitleFromFile('Show S01E03.mkv')).toBeNull()
+    expect(episodeTitleFromFile('random.mkv')).toBeNull()
   })
 })

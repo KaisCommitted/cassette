@@ -11,9 +11,9 @@ where it now does it differently. Why each change was made is in
 - [x] Loading state while the saved library is read ("Reading your folder…") — now "Reading your library…" beside the mark
 - [x] First run, no library: explanation that nothing leaves the machine, and a Choose folder button (`chooseFolder`, then `setRoots`) — designed: one question, then a first-scan screen with a counter, the folder, a bar and Stop
 - [x] Settings are re-read after choosing a folder (`getSettings`)
-- [x] Navigation between Library and Settings, with the current one marked — top bar instead of a rail; `aria-current` marks the current one
+- [x] Navigation between Library and Settings, with the current one marked — the mark goes to the library and a cog to settings, with Back beside the mark off the library; `aria-current` marks the current one
 - [x] Going to Library from the nav clears the search
-- [x] Nav buttons keep the `rail-link` class and text starting "Library" / "Settings", and the scroll container keeps the `main` class — `src/main/testCapture.ts` drives `CASSETTE_CAPTURE_NAV` and `CASSETTE_CAPTURE_SCROLL` through them
+- [x] Nav buttons keep the `rail-link` class and text starting "Library" / "Settings" (a visually hidden label on the mark and the cog), and the scroll container keeps the `main` class — `src/main/testCapture.ts` drives `CASSETTE_CAPTURE_NAV` and `CASSETTE_CAPTURE_SCROLL` through them
 - [x] Ambient colour: the page takes a wash of the dominant colour of the lead item's backdrop on the library, or the open series' backdrop (`useAmbient`)
 - [x] Watch progress is re-read when the player closes (`onPlaybackState` with no path, then `getProgress`)
 - [x] Metadata is read on launch (`getMetadata`) and replaced when artwork finishes downloading (`onMetadataReady`)
@@ -23,7 +23,7 @@ where it now does it differently. Why each change was made is in
 
 ## Update notice (`UpdateBanner`)
 
-- [x] Hidden until an update exists (`onUpdateAvailable`, `onUpdateProgress`, `onUpdateReady`) — now a strip under the top bar, in the page flow; a finished download shows again after "Not now"
+- [x] Hidden until an update exists (`onUpdateAvailable`, `onUpdateProgress`, `onUpdateReady`) — a card floating in the bottom-left corner, out of the page's layout and clear of the top bar's chips and the player; it slides in once; a finished download shows again after "Not now"
 - [x] Available: version, "nothing restarts until you say so", Download (`startUpdateDownload`) and Not now
 - [x] Downloading: version, percentage bar, "carry on watching"
 - [x] Ready: Restart and install (`installUpdate`) and Later
@@ -59,7 +59,7 @@ where it now does it differently. Why each change was made is in
 ## Series (`SeriesView`)
 
 - [x] Backdrop hero when TMDB has one
-- [x] Back to library
+- [x] Back to library — Back in the top bar, Escape, Alt+Left or the mouse's back button, each one step back to the screen that opened it
 - [x] Title with year, "N episodes across seasons …, N watched.", overview
 - [x] Start watching (nothing watched yet) / Resume, via `resumeSeries`
 - [x] Find subtitles for the whole series (`scanSubtitles` series scope)

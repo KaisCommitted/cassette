@@ -15,7 +15,7 @@
 .shell {
   --gutter: clamp(20px, 2.6vw, 64px);
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   grid-template-columns: minmax(0, 1fr);
   height: 100%;
   background:
@@ -100,13 +100,40 @@
 
 /* ============ top bar ============ */
 
+/*
+ * Three columns: back and the mark on the left, search in the middle, the
+ * cog on the right. The outer columns share the leftover width equally, so
+ * search sits at the true centre of the window whether or not Back is there.
+ */
 .topbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  gap: clamp(16px, 2vw, 36px);
+  gap: 16px;
   height: 64px;
   padding: 0 var(--gutter);
   border-bottom: 1px solid var(--line);
+}
+
+.topbar-start {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.topbar-back {
+  width: 38px;
+  height: 38px;
+  margin-left: -8px;
+  color: var(--cream);
+  /* Arrives with the page it belongs to rather than blinking on. */
+  animation: back-in var(--t-settle) var(--ease-out) both;
+}
+@keyframes back-in {
+  from {
+    opacity: 0;
+    transform: translateX(6px);
+  }
 }
 
 .brand {
@@ -114,12 +141,21 @@
   align-items: center;
   gap: 10px;
   height: 40px;
-  padding: 0 6px;
-  margin-left: -6px;
+  padding: 0 8px 0 6px;
   border: 0;
   border-radius: var(--r-md);
   background: transparent;
   color: var(--cream);
+  transition: background-color var(--t-quick) ease;
+}
+.brand:hover {
+  background: oklch(0.906 0.02 80 / 0.06);
+}
+.topbar-back + .brand {
+  margin-left: 0;
+}
+.brand:not(.topbar-back + .brand) {
+  margin-left: -6px;
 }
 .brand-mark {
   height: 28px;
@@ -130,56 +166,32 @@
   margin-top: 1px;
 }
 
-.nav {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-.nav-link {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 36px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: var(--r-md);
-  background: transparent;
-  color: var(--muted);
-  font-size: var(--text-md);
-  font-weight: 540;
-  transition:
-    background-color var(--t-quick) ease,
-    color var(--t-quick) ease;
-}
-.nav-link .icon {
-  width: 18px;
-  height: 18px;
-}
-.nav-link:hover {
-  color: var(--cream);
-  background: oklch(0.906 0.02 80 / 0.06);
-}
-.nav-link[aria-current='page'] {
-  color: var(--cream);
-  background: var(--raised);
-}
-.nav-link[aria-current='page'] .icon {
-  color: var(--brass);
-}
-
 .topbar-end {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-left: auto;
+  justify-content: flex-end;
+  gap: 12px;
   min-width: 0;
+}
+.topbar-settings {
+  width: 38px;
+  height: 38px;
+  margin-right: -8px;
+}
+.topbar-settings .icon {
+  width: 21px;
+  height: 21px;
+}
+.topbar-settings[aria-current='page'] {
+  color: var(--brass);
+  background: var(--raised);
 }
 
 .searchbox {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: clamp(220px, 24vw, 400px);
+  width: clamp(260px, 36vw, 560px);
   height: 38px;
   padding: 0 8px 0 11px;
   border: 1px solid var(--line-strong);
@@ -279,63 +291,100 @@
 
 /* ============ update notice ============ */
 
-.notice {
+/*
+ * Bottom-left, floating over the page rather than part of it, small enough to
+ * ignore. Clear of the top bar's chips; the player's controls are a window of
+ * their own above this one, so it can never cover them.
+ */
+.update-card {
+  position: fixed;
+  left: 20px;
+  bottom: 20px;
+  z-index: 20;
   display: flex;
-  align-items: center;
-  gap: 14px;
-  min-height: 48px;
-  padding: 7px var(--gutter);
-  border-bottom: 1px solid var(--line);
-  background: oklch(0.752 0.118 82 / 0.08);
-  font-size: var(--text-sm);
+  gap: 12px;
+  width: min(340px, calc(100vw - 40px));
+  padding: 14px 12px 15px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  background: oklch(0.245 0.007 70 / 0.98);
+  box-shadow: 0 16px 40px oklch(0 0 0 / 0.55);
+  /* The one movement: it slides in when it appears, and then stays put. */
+  animation: update-in 280ms var(--ease-out) both;
 }
-.notice-dot {
+@keyframes update-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+.update-mark {
+  display: grid;
+  place-items: center;
   flex: none;
-  width: 8px;
-  height: 8px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: var(--brass);
+  color: var(--ink);
 }
-.notice-text {
-  color: var(--muted);
+.update-mark .icon {
+  width: 18px;
+  height: 18px;
+}
+
+.update-body {
+  flex: 1;
   min-width: 0;
+  padding-top: 1px;
 }
-.notice-text strong {
-  color: var(--cream);
+.update-title {
+  font-family: var(--font-display);
+  font-size: var(--text-md);
   font-weight: 600;
+  line-height: 1.3;
+  margin-bottom: 3px;
+  padding-right: 22px;
 }
-.notice-actions {
+.update-sub {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+.update-pct {
+  color: var(--cream);
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+}
+.update-actions {
   display: flex;
   gap: 6px;
-  margin-left: auto;
+  margin-top: 12px;
 }
-.notice-progress {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-left: auto;
-  font-variant-numeric: tabular-nums;
-  color: var(--muted);
-}
-.notice-bar {
+.update-bar {
   display: block;
-  width: 160px;
   height: 4px;
+  margin: 10px 0 8px;
   border-radius: 99px;
   background: oklch(0.906 0.02 80 / 0.14);
   overflow: hidden;
 }
-.notice-bar > span {
+.update-bar > span {
   display: block;
   height: 100%;
   background: var(--brass);
   transition: width var(--t-settle) var(--ease-out);
 }
-.notice-close {
-  width: 30px;
-  height: 30px;
+
+.update-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
 }
-.notice-close .icon {
+.update-close .icon {
   width: 16px;
   height: 16px;
 }

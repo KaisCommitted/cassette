@@ -101,6 +101,12 @@ p {
   font-weight: 560;
   transition: background-color var(--t-quick) ease;
 }
+.osd-back-label {
+  max-width: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .osd-back .icon {
   width: 18px;
   height: 18px;
@@ -119,6 +125,9 @@ p {
 .osd-series {
   color: oklch(0.906 0.02 80 / 0.72);
   font-size: var(--text-sm);
+}
+.osd-episode-only {
+  line-height: 34px;
 }
 .osd-episode {
   font-family: var(--font-display);

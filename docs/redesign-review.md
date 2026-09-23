@@ -14,9 +14,11 @@ real libraries through it — the one on this machine, and a generated one of
   non-scrolling box.
 - **Space Grotesk over DM Sans**, now bundled as variable woff2 files. Space
   Grotesk carries headings, counters and keycaps; DM Sans everything read.
-- **The top bar** with the mark, Library, Settings and search, replacing the
-  left rail. It gives the grid the full width, and search belongs somewhere
-  reachable from every screen.
+- **The top bar**, replacing the left rail. It gives the grid the full width,
+  and search belongs somewhere reachable from every screen. The prototype's
+  Library and Settings tabs are gone: with only two places, the mark is the
+  way home, a cog in the corner is settings, and Back sits first whenever
+  you are off the library. Search takes the true centre.
 - **"Still watching" as a card**, the episode's still beside its title,
   overview, progress and Resume — the prototype's best idea, and closer to why
   you open the app than the old full-bleed hero.
@@ -79,21 +81,33 @@ real libraries through it — the one on this machine, and a generated one of
 - **Nothing found** in search: what search looks at, and Clear search.
 - **Subtitle results**: a panel beside the episode list instead of a log
   pushed in above it.
-- **Update notice**: a strip under the top bar, in the page's flow, so it never
-  covers a tile or the controls.
+- **Update notice**: a card floating in the bottom-left corner, as before the
+  redesign but in its colours, type and icons. It takes no place in the
+  page, so appearing never pushes the library down under the pointer; it is
+  clear of the top bar's chips, and the player's controls are a window above
+  it. It slides in once, and not at all under reduced motion.
 - **Loading a file** in the player: the mark, a spinner, and the episode's
   name.
 - **Exit fullscreen** icon, drawn in the set's grid and stroke.
 
 ### Getting around
 
-- **Back lands where you left.** Every view and every search remembers its
-  scroll. Leaving a series by its back button, Library or Escape lands on the
-  tile you opened it from, focused. Returning to a search's results restores
-  them at the same scroll.
-- **The player returns you to the episode.** Closing it opens the season of
-  the last episode played, even when autoplay crossed into the next season,
-  scrolls to its row, focuses it, and marks it "Last played".
+- **Back is previous, not home.** Back in the top bar, Escape, Alt+Left and
+  the mouse's back button all step back one screen to whatever opened the one
+  you are on — settings opened from a series goes back to that series.
+  Leaving a series for the library lands on its tile, focused. Every search
+  keeps its results at the same scroll.
+- **A series opens on the episode you are on**: the one part-way through,
+  else the next unwatched, with its season selected, its row scrolled into
+  view and marked "Last played" or "Up next".
+- **The player returns you to the episode.** Closing it — Escape, the button
+  naming the series, or the close binding — opens that series on the
+  episode's season with its row in view and focused, wherever playback was
+  started, even when autoplay crossed seasons. Escape in fullscreen only
+  leaves fullscreen; it is fixed to mean back and is not rebindable.
+- **Episodes are named even without TMDB**: the title in the file's name
+  ("S06E01 The Desert Rose") is used before falling back to "S6 E1", and
+  seasons added after a series was first matched now get their TMDB titles.
 - **The library is inert under the player**, so Tab cannot walk through
   invisible tiles, and focus returns to whatever started playback.
 - **Keyboard**: `/` or Ctrl+F reaches search from anywhere; Escape clears the
@@ -113,7 +127,8 @@ real libraries through it — the one on this machine, and a generated one of
   something: a speed other than 1× or a running timer shows on the button.
 - **The episode's TMDB title in the top band**, fetched once per file, where
   the old bar showed the filename label.
-- **The close button became "Library"** at top left: it says where it goes.
+- **The close button names where it goes**: the series for an episode, the
+  library for a film.
 - **Menus open above the seek bar**, not over it.
 - **Speed as a grid**, the sleep menu says what the timer is doing.
 

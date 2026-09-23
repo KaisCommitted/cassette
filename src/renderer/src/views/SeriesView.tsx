@@ -12,7 +12,14 @@ import { Backdrop, FrameArt, ProgressSeam } from '../components/Art'
 import { ScanLog } from '../components/ScanLog'
 import { Clamp } from '../components/Clamp'
 import { Icon } from '../../shared/Icon'
-import { describeSeasons, episodeLabel, formatRemaining, summariseSeries } from '../select'
+import {
+  describeSeasons,
+  episodeLabel,
+  episodeTitleFromFile,
+  formatRemaining,
+  summariseSeries
+} from '../select'
+import { resumeTarget } from '../../../main/library/resume'
 
 export interface SeriesViewProps {
   series: SeriesEntry
@@ -22,7 +29,6 @@ export interface SeriesViewProps {
   lastPlayedKey: string | null
   /** Bumped each time the player closes. */
   returns: number
-  onBack: () => void
   onPlay: (path: string, key: string) => void
   onResumeSeries: (seriesId: string) => void
   onRefreshProgress: () => void
@@ -46,7 +52,6 @@ export function SeriesView({
   metadata,
   lastPlayedKey,
   returns,
-  onBack,
   onPlay,
   onResumeSeries,
   onRefreshProgress
@@ -56,10 +61,23 @@ export function SeriesView({
   const title = meta?.title ?? series.title
   const year = meta?.year ?? series.year
 
+  /*
+   * The episode you are on: the one just watched if it is in this series,
+   * otherwise the same one Resume would pick — part-way through, else the
+   * next unwatched. The series opens on its season, scrolled to it.
+   */
+  const [here] = useState(() => {
+    const inSeries = (key: string | null): boolean =>
+      key !== null && series.seasons.some((s) => s.episodes.some((e) => e.file.key === key))
+    if (inSeries(lastPlayedKey)) return { key: lastPlayedKey!, reason: 'last' as const }
+    const target = resumeTarget(series, progress)
+    return target
+      ? { key: target.episode.file.key, reason: target.reason === 'in-progress' ? ('last' as const) : ('next' as const) }
+      : null
+  })
   const [season, setSeason] = useState(
     () =>
-      series.seasons.find((s) => s.episodes.some((e) => !progress.get(e.file.key)?.finished))
-        ?.season ??
+      series.seasons.find((s) => s.episodes.some((e) => e.file.key === here?.key))?.season ??
       series.seasons[0]?.season ??
       0
   )
@@ -152,6 +170,24 @@ export function SeriesView({
   }, [returns, lastPlayedKey, series.seasons])
 
   const listRef = useRef<HTMLOListElement>(null)
+
+  // On opening, bring the episode you are on into view — only if it is not
+  // already, so a series whose first episode is next still opens at the top.
+  useLayoutEffect(() => {
+    if (!here || !listRef.current) return
+    const row = listRef.current.querySelector<HTMLElement>(
+      `[data-return="${CSS.escape(`episode:${here.key}`)}"]`
+    )
+    const scroller = row?.closest<HTMLElement>('.main')
+    if (!row || !scroller) return
+    const rowBox = row.getBoundingClientRect()
+    const view = scroller.getBoundingClientRect()
+    if (rowBox.bottom > view.bottom - 24 || rowBox.top < view.top) {
+      scroller.scrollTop += rowBox.top - view.top - (view.height - rowBox.height) / 2
+    }
+    // Once, when the series opens.
+  }, [])
+
   useLayoutEffect(() => {
     const key = focusAfterReturn.current
     if (!key || !listRef.current) return
@@ -193,11 +229,6 @@ export function SeriesView({
         </div>
 
         <div className="series-hero-inner">
-          <button className="btn btn-ghost btn-sm back-btn" onClick={onBack}>
-            <Icon name="back-arrow" />
-            Library
-          </button>
-
           <p className="series-meta">
             {year ? `${year}. ` : ''}
             {summary.episodeCount === 1 ? '1 episode' : `${summary.episodeCount} episodes`} across{' '}
@@ -315,7 +346,14 @@ export function SeriesView({
                 record={progress.get(episode.file.key)}
                 metadata={metadata}
                 seriesTitle={title}
-                last={episode.file.key === lastPlayedKey}
+                marker={
+                  episode.file.key === lastPlayedKey ||
+                  (here?.reason === 'last' && episode.file.key === here.key)
+                    ? 'Last played'
+                    : here?.reason === 'next' && episode.file.key === here.key
+                      ? 'Up next'
+                      : null
+                }
                 searching={searching}
                 onPlay={() => onPlay(episode.file.path, episode.file.key)}
                 onToggleWatched={(watched) => void toggleWatched(episode.file.key, watched)}
@@ -420,7 +458,7 @@ function EpisodeRow({
   record,
   metadata,
   seriesTitle,
-  last,
+  marker,
   searching,
   onPlay,
   onToggleWatched,
@@ -430,7 +468,8 @@ function EpisodeRow({
   record: ProgressRecord | undefined
   metadata: MetadataSnapshot
   seriesTitle: string
-  last: boolean
+  /** "Last played" or "Up next", for the episode you are on. */
+  marker: string | null
   searching: boolean
   onPlay: () => void
   onToggleWatched: (watched: boolean) => void
@@ -443,6 +482,10 @@ function EpisodeRow({
   const started = !finished && fraction > 0 && (record?.positionSeconds ?? 0) > 30
   const fileName = episode.file.path.split(/[\\/]/).pop() ?? ''
   const short = episodeLabel(episode.label, 'short')
+  // TMDB's title first, then the one in the file's name, and only then the
+  // bare number: "S6 E1" is what is left when nothing names the episode.
+  const name = meta?.title || episodeTitleFromFile(episode.file.path) || short
+  const last = marker !== null
   const number = episode.episodes.length > 1 ? episode.episodes.join('–') : String(episode.episodes[0] ?? '')
 
   const status = finished
@@ -459,7 +502,7 @@ function EpisodeRow({
         className="episode-main"
         onClick={onPlay}
         data-return={`episode:${episode.file.key}`}
-        aria-label={`Play ${short}${meta?.title ? `, ${meta.title}` : ''}`}
+        aria-label={`Play ${short}${name !== short ? `, ${name}` : ''}`}
       >
         <span className="episode-no" aria-hidden="true">
           {number}
@@ -477,11 +520,11 @@ function EpisodeRow({
           </FrameArt>
         </span>
         <span className="episode-text">
-          <span className="episode-title">{meta?.title || short}</span>
+          <span className="episode-title">{name}</span>
           <span className="episode-meta">
             {short}
             {status && <span className={finished ? 'is-watched' : undefined}>{status}</span>}
-            {last && <span className="is-last-label">Last played</span>}
+            {marker && <span className="is-last-label">{marker}</span>}
           </span>
           <EpisodeOverview text={meta?.overview || fileName} />
         </span>

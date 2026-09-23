@@ -181,17 +181,36 @@ export function App() {
 
   const currentKey = viewKey(view, query)
 
+  /**
+   * Where Back goes. The library is the root, so going there clears it; any
+   * other screen remembers the one it was opened from, so settings opened
+   * from a series goes back to that series, not to the library.
+   */
+  const history = useRef<View[]>([])
+
   const navigate = useCallback(
-    (next: View, focus: string | null = null) => {
+    (next: View, focus: string | null = null, direction?: 'forward' | 'back') => {
       const main = mainRef.current
       if (main) scrollMemory.current.set(currentKey, main.scrollTop)
-      transitionTo(next.name === 'home' ? 'back' : 'forward', () => {
+      if (next.name === 'home') history.current = []
+      else if (direction !== 'back') history.current.push(view)
+      transitionTo(direction ?? (next.name === 'home' ? 'back' : 'forward'), () => {
         pendingFocus.current = focus
         setView(next)
       })
     },
-    [currentKey]
+    [currentKey, view]
   )
+
+  /** One step back, landing on whatever opened the screen being left. */
+  const goBack = useCallback(() => {
+    if (view.name === 'home') return
+    const previous = history.current.pop() ?? { name: 'home' as const }
+    // Coming out of a series onto the library lands on that series' tile.
+    const focus =
+      view.name === 'series' && previous.name === 'home' ? `series:${view.id}` : 'page-start'
+    navigate(previous, focus, 'back')
+  }, [view, navigate])
 
   const changeQuery = useCallback(
     (next: string) => {
@@ -211,7 +230,11 @@ export function App() {
   useLayoutEffect(() => {
     const main = mainRef.current
     if (!main) return
-    main.scrollTop = scrollMemory.current.get(currentKey) ?? 0
+    // A series always opens on the episode you are on, and scrolls itself
+    // there (see SeriesView); every other screen comes back where it was.
+    if (!currentKey.startsWith('series:')) {
+      main.scrollTop = scrollMemory.current.get(currentKey) ?? 0
+    }
     const focus = pendingFocus.current
     pendingFocus.current = null
     if (!focus) return
@@ -227,6 +250,26 @@ export function App() {
     (focus: string | null = null) => navigate({ name: 'home' }, focus),
     [navigate]
   )
+
+  /*
+   * Closing the player lands on the episode you were watching: its series
+   * opens on that season with the row in view and focused, wherever playback
+   * was started from. Back from there is the screen you came from. A film has
+   * no page of its own, so closing one leaves you where you were.
+   */
+  const handledReturns = useRef(returns)
+  useEffect(() => {
+    if (returns === handledReturns.current) return
+    handledReturns.current = returns
+    if (!library || !lastPlayedKey) return
+    const home = library.series.find((s) =>
+      s.seasons.some((season) => season.episodes.some((e) => e.file.key === lastPlayedKey))
+    )
+    if (!home) return
+    if (view.name === 'series' && view.id === home.id) return
+    navigate({ name: 'series', id: home.id }, `episode:${lastPlayedKey}`, 'back')
+    history.current.push(view)
+  }, [returns, library, lastPlayedKey, view, navigate])
 
   // ---- keyboard ----
 
@@ -256,16 +299,26 @@ export function App() {
         searchRef.current?.select()
         return
       }
-      // Escape backs out of wherever you are to the library, the way the
-      // browser's back does, and lands on the tile you came from.
-      if (e.key === 'Escape' && !typing && view.name !== 'home') {
+      // Escape, Alt+Left and the mouse's back button all step back one screen,
+      // the way a browser's back does.
+      const back = (e.key === 'Escape' && !typing) || (e.key === 'ArrowLeft' && e.altKey)
+      if (back && view.name !== 'home') {
         e.preventDefault()
-        goHome(view.name === 'series' ? `series:${view.id}` : null)
+        goBack()
       }
     }
+    const onMouse = (e: MouseEvent): void => {
+      if (playingRef.current || e.button !== 3) return
+      e.preventDefault()
+      goBack()
+    }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [view, goHome])
+    window.addEventListener('mouseup', onMouse)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('mouseup', onMouse)
+    }
+  }, [view, goBack])
 
   // ---- colour ----
 
@@ -330,6 +383,7 @@ export function App() {
         current={view.name === 'settings' ? 'settings' : 'library'}
         query={query}
         onQueryChange={changeQuery}
+        onBack={view.name === 'home' ? null : goBack}
         onLibrary={() => {
           // The Library button is "take me to the top of my library": it
           // clears a search, and returning to it from elsewhere keeps its place.
@@ -337,13 +391,14 @@ export function App() {
           else if (view.name === 'home') mainRef.current?.scrollTo({ top: 0 })
           else goHome(view.name === 'series' ? `series:${view.id}` : null)
         }}
-        onSettings={() => navigate({ name: 'settings' }, 'page-start')}
+        onSettings={() => {
+          if (view.name === 'settings') goBack()
+          else navigate({ name: 'settings' }, 'page-start')
+        }}
         scanning={lib.scanning}
         scanProgress={lib.scanProgress}
         artwork={artwork}
       />
-
-      <UpdateBanner />
 
       {/* `main` is also what the automated capture scrolls (testCapture.ts). */}
       <main className="main" ref={mainRef} key={currentKey.startsWith('home:') ? 'home' : currentKey}>
@@ -374,7 +429,6 @@ export function App() {
               metadata={metadata}
               lastPlayedKey={lastPlayedKey}
               returns={returns}
-              onBack={() => goHome(`series:${series.id}`)}
               onPlay={play}
               onResumeSeries={resumeSeries}
               onRefreshProgress={() => void refreshProgress()}
@@ -422,6 +476,9 @@ export function App() {
           />
         )}
       </main>
+
+      {/* Floats over the page from the corner; takes no place in its layout. */}
+      <UpdateBanner />
     </div>
   )
 }

@@ -204,3 +204,30 @@ export function formatAgo(iso: string, now: Date = new Date()): string {
   if (days < 31) return days === 1 ? 'yesterday' : `${days} days ago`
   return `on ${then.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}`
 }
+
+/** Release tags that mark the end of a title in a filename. */
+const RELEASE_TAG =
+  /\b(\d{3,4}p|[xh]\.?26[45]|hevc|web(-?dl|rip)?|blu-?ray|bdrip|brrip|hdtv|dvdrip|amzn|nf|dsnp|hmax|atvp|aac\d?|ddp?\d?|dts|10bit|proper|repack|internal)\b/i
+
+/**
+ * An episode's title as the file names it, for when TMDB has none.
+ *
+ * Release names usually carry it after the episode number —
+ * "The Mentalist S06E01 The Desert Rose.mkv" — and it is a far better label
+ * than "S6 E1". Release tags after it are cut off, and anything that is not
+ * plainly words is ignored rather than shown.
+ */
+export function episodeTitleFromFile(path: string): string | null {
+  const base = path.split(/[\\/]/).pop() ?? ''
+  const name = base.replace(/\.[a-z0-9]{2,4}$/i, '')
+  const match = /S\d{1,2}E\d{1,3}(?:-?E\d{1,3})?(.*)$/i.exec(name)
+  if (!match) return null
+  let rest = match[1]!.replace(/[._]+/g, ' ')
+  const tag = RELEASE_TAG.exec(rest)
+  if (tag) rest = rest.slice(0, tag.index)
+  rest = rest
+    .replace(/\[[^\]]*\]|\([^)]*\)/g, ' ')
+    .replace(/^[\s\-–:]+|[\s\-–:]+$/g, '')
+    .replace(/\s{2,}/g, ' ')
+  return /\p{L}{2}/u.test(rest) ? rest : null
+}
