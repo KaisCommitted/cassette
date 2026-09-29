@@ -103,6 +103,10 @@ export function App() {
   const [artwork, setArtwork] = useState<MetadataProgressInfo | null>(null)
 
   const [playing, setPlaying] = useState(false)
+  /** Playing in picture-in-picture, which leaves the library uncovered and usable. */
+  const [pip, setPip] = useState(false)
+  /** The player is over the library: playing, and not in picture-in-picture. */
+  const covered = playing && !pip
   /** Play was pressed and the library is going dark; the player is not up yet. */
   const [opening, setOpening] = useState(false)
   /** The first moments of the library on screen, which get an entrance. */
@@ -148,6 +152,8 @@ export function App() {
   const libraryRef = useRef(library)
   libraryRef.current = library
   const playingRef = useRef(false)
+  const pipRef = useRef(false)
+  const pipPathRef = useRef<string | null>(null)
   useEffect(
     () =>
       window.cassette.onPlaybackState((state) => {
@@ -156,6 +162,27 @@ export function App() {
           const key = keyForPath(libraryRef.current, state.path)
           if (key) setLastPlayedKey(key)
         }
+        // In picture-in-picture the library is on show while things play, so
+        // it catches up on watch positions on the way in and at each new
+        // episode, rather than only once the player closes.
+        const nowPip = nowPlaying && state.pip
+        const wasPip = pipRef.current
+        if (nowPip !== wasPip) {
+          pipRef.current = nowPip
+          setPip(nowPip)
+          // Back to the full player: whatever you were on in the library is
+          // what focus returns to when it closes. Read now, before the
+          // library goes inert and lets go of it.
+          if (wasPip && nowPlaying) {
+            const active = document.activeElement
+            focusBeforePlay.current = active instanceof HTMLElement ? active : null
+          }
+        }
+        const pipPath = nowPip ? state.path : null
+        if (pipPath !== pipPathRef.current) {
+          pipPathRef.current = pipPath
+          if (pipPath) void refreshProgress()
+        }
         if (nowPlaying === playingRef.current) return
         playingRef.current = nowPlaying
         setPlaying(nowPlaying)
@@ -163,7 +190,11 @@ export function App() {
           void refreshProgress()
           // The player can change settings too (the sleep timer's night light).
           void window.cassette.getSettings().then(setSettings)
-          setReturns((n) => n + 1)
+          // Coming back up out of the dark puts you on what you were
+          // watching. Closing picture-in-picture is not coming back: you
+          // were already in the library, maybe somewhere else entirely, and
+          // stay there.
+          if (!wasPip) setReturns((n) => n + 1)
         }
       }),
     [refreshProgress]
@@ -173,11 +204,11 @@ export function App() {
   // walk through invisible tiles and Enter could start something else. It is
   // inert while the player is up, and focus goes back where it was after.
   useEffect(() => {
-    if (playing) return
+    if (covered) return
     const target = focusBeforePlay.current
     focusBeforePlay.current = null
     if (target?.isConnected) target.focus({ preventScroll: true })
-  }, [playing])
+  }, [covered])
 
   const rememberFocus = useCallback(() => {
     const active = document.activeElement
@@ -198,6 +229,12 @@ export function App() {
   const openingRef = useRef(false)
   const startInTheDark = useCallback(
     (start: () => Promise<unknown>) => {
+      // Picture-in-picture plays the new pick where it is; the library stays
+      // lit and usable.
+      if (pipRef.current) {
+        void start().catch(() => undefined)
+        return
+      }
       if (openingRef.current) return
       rememberFocus()
       openingRef.current = true
@@ -361,7 +398,7 @@ export function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.defaultPrevented || playingRef.current) return
+      if (e.defaultPrevented || (playingRef.current && !pipRef.current)) return
       const typing = isTextEntry(e.target as Element | null)
 
       if ((e.key === '/' && !typing) || (e.key === 'f' && e.ctrlKey && !e.altKey)) {
@@ -379,7 +416,7 @@ export function App() {
       }
     }
     const onMouse = (e: MouseEvent): void => {
-      if (playingRef.current || e.button !== 3) return
+      if ((playingRef.current && !pipRef.current) || e.button !== 3) return
       e.preventDefault()
       goBack()
     }
@@ -456,7 +493,7 @@ export function App() {
       className="shell"
       style={{ ['--ambient' as string]: `rgb(${ambient.rgb})` }}
       data-launch={launching || undefined}
-      inert={playing || opening}
+      inert={covered || opening}
     >
       <Header
         ref={searchRef}
@@ -566,10 +603,10 @@ export function App() {
       <UpdateBanner />
 
       {/* The lights: down while the player opens and while it is up. */}
-      <div className={opening || playing ? 'veil is-down' : 'veil'} aria-hidden="true" />
+      <div className={opening || covered ? 'veil is-down' : 'veil'} aria-hidden="true" />
 
       {/* Over the veil while the player is up: what the Alt-Tab tile shows. */}
-      {playing && lastPlayedKey && (
+      {covered && lastPlayedKey && (
         <NowPlayingCard library={library} metadata={metadata} mediaKey={lastPlayedKey} />
       )}
     </div>

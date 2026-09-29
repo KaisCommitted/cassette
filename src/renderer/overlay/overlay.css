@@ -122,6 +122,23 @@ p {
 .osd.is-shown .osd-back {
   pointer-events: auto;
 }
+/* Picture-in-picture, at the far end of the band from the way out, sized to
+   match it. */
+.osd-top-end {
+  flex: none;
+  margin-left: auto;
+}
+.osd-top-end .osd-btn {
+  width: 34px;
+  height: 34px;
+}
+.osd-top-end .osd-btn .icon {
+  width: 18px;
+  height: 18px;
+}
+.osd.is-shown .osd-top-end {
+  pointer-events: auto;
+}
 .osd-heading {
   min-width: 0;
   padding-top: 1px;
@@ -380,6 +397,154 @@ p {
   .osd-controls {
     gap: 12px;
   }
+}
+
+/* ---- picture-in-picture: the small floating window ---- */
+
+/*
+ * The same controls, fewer of them, over a picture a few hundred pixels
+ * wide. They show while the pointer is over the window and go when it
+ * leaves (Overlay.tsx); the edges resize it and the picture moves it
+ * (PipControls.tsx).
+ */
+.pip-controls {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  /* A shade over the whole picture, deeper at top and bottom where the
+     buttons and the seek bar sit, so they read over anything. */
+  background: linear-gradient(
+    oklch(0.17 0.004 85 / 0.6),
+    oklch(0.17 0.004 85 / 0.3) 35%,
+    oklch(0.17 0.004 85 / 0.3) 65%,
+    oklch(0.17 0.004 85 / 0.75)
+  );
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 600ms var(--ease-in-out);
+}
+.osd.is-shown .pip-controls {
+  opacity: 1;
+  transition: opacity var(--t-quick) var(--ease-out);
+}
+/* The shade lets presses through to the picture, which moves the window;
+   only the controls themselves take them, and only while they show. */
+.osd.is-shown .pip-controls .osd-btn,
+.osd.is-shown .pip-controls .seek {
+  pointer-events: auto;
+}
+.pip-corner {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 8px;
+}
+.pip-middle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.pip-seek {
+  padding: 0 12px 6px;
+}
+.osd.is-pip .osd-btn {
+  width: 32px;
+  height: 32px;
+}
+.osd.is-pip .osd-btn .icon {
+  width: 18px;
+  height: 18px;
+}
+.osd.is-pip .osd-btn.is-primary {
+  width: 42px;
+  height: 42px;
+}
+.osd.is-pip .osd-btn.is-primary .icon {
+  width: 22px;
+  height: 22px;
+}
+
+/* Grab strips for resizing, over everything else at the window's edge. The
+   corners are larger than the edges are thick, so they are easy to find. */
+.pip-edge {
+  position: absolute;
+  z-index: 5;
+}
+.pip-edge-n,
+.pip-edge-s {
+  left: 14px;
+  right: 14px;
+  height: 6px;
+  cursor: ns-resize;
+}
+.pip-edge-n {
+  top: 0;
+}
+.pip-edge-s {
+  bottom: 0;
+}
+.pip-edge-e,
+.pip-edge-w {
+  top: 14px;
+  bottom: 14px;
+  width: 6px;
+  cursor: ew-resize;
+}
+.pip-edge-e {
+  right: 0;
+}
+.pip-edge-w {
+  left: 0;
+}
+.pip-edge-ne,
+.pip-edge-nw,
+.pip-edge-se,
+.pip-edge-sw {
+  width: 14px;
+  height: 14px;
+}
+.pip-edge-nw {
+  top: 0;
+  left: 0;
+  cursor: nwse-resize;
+}
+.pip-edge-se {
+  right: 0;
+  bottom: 0;
+  cursor: nwse-resize;
+}
+.pip-edge-ne {
+  top: 0;
+  right: 0;
+  cursor: nesw-resize;
+}
+.pip-edge-sw {
+  bottom: 0;
+  left: 0;
+  cursor: nesw-resize;
+}
+
+/*
+ * Toasts and the opening screen at a size for the small window, by one
+ * factor for all of them rather than restyling each, so a toast added later
+ * shrinks along with the rest. `zoom` scales their offsets too, so the
+ * stack keeps its spacing.
+ */
+.osd.is-pip {
+  --pip-scale: 0.55;
+}
+.osd.is-pip .osd-toast,
+.osd.is-pip .osd-volume-toast,
+.osd.is-pip .osd-loading > * {
+  zoom: var(--pip-scale);
+}
+/* The opening screen covers the whole small window; presses go through it
+   to the picture underneath, so the window can be moved while the next
+   episode opens. */
+.osd.is-pip .osd-loading {
+  pointer-events: none;
 }
 
 /* ---- menus ---- */

@@ -4,14 +4,18 @@ import { describeKey, hookKeyName } from './descriptors'
 /**
  * Watches the keyboard and mouse at OS level, for the single global binding.
  *
- * Only the descriptor bound to `hideAndPause` is acted on; everything else the
- * hook sees is discarded. The hook observes without consuming, so nothing here
- * takes an input away from whatever app is focused.
+ * Only the descriptor bound to `hideAndPause` is acted on, plus the primary
+ * button coming up, which ends a picture-in-picture drag wherever the
+ * pointer is; everything else the hook sees is discarded. The hook observes
+ * without consuming, so nothing here takes an input away from whatever app
+ * is focused.
  */
 export interface NativeHookDeps {
   /** Descriptor currently bound to the global action, or null if unbound. */
   globalDescriptor: () => string | null
   onTrigger: () => void
+  /** The primary mouse button released anywhere; optional. */
+  onPrimaryUp?: () => void
 }
 
 const KEY_NAMES = new Map<number, string>(
@@ -47,13 +51,19 @@ export function startNativeHook(deps: NativeHookDeps): () => void {
     if (descriptor && matches(descriptor)) deps.onTrigger()
   }
 
+  const onMouseUp = (e: { button: unknown }): void => {
+    if (Number(e.button) === 1) deps.onPrimaryUp?.()
+  }
+
   uIOhook.on('keydown', onKeyDown)
   uIOhook.on('mousedown', onMouseDown)
+  uIOhook.on('mouseup', onMouseUp)
   uIOhook.start()
 
   return () => {
     uIOhook.off('keydown', onKeyDown)
     uIOhook.off('mousedown', onMouseDown)
+    uIOhook.off('mouseup', onMouseUp)
     try {
       uIOhook.stop()
     } catch {

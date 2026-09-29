@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { VOLUME_MAX, type NightLightState, type PlaybackState, type VolumeStep } from '@shared/types'
-import { ControlBar } from './ControlBar'
+import { Control, ControlBar } from './ControlBar'
+import { PipControls, PipEdges, usePipMove } from './PipControls'
 import { describeMouse, formatTime } from './format'
 import { useNowPlaying } from './useNowPlaying'
 import { Icon, Logo } from '../shared/Icon'
@@ -79,6 +80,15 @@ export function Overlay() {
     hideTimer.current = setTimeout(() => setVisible(false), IDLE_HIDE_MS)
   }, [])
 
+  const pip = state?.pip ?? false
+  // In the small window a left press may be the start of a move, so it only
+  // reaches the bindings once it has come up without becoming one.
+  const pipMove = usePipMove(pip, () => window.cassette.runInput('mouse:left'))
+
+  // The full player's menus go with it: one left open when the player went
+  // small would otherwise hold the little window's controls up for good.
+  useEffect(() => setMenuOpen(false), [pip])
+
   // Cursor movement is reported by the main process rather than read from DOM
   // events: this window is click-through and non-focusable, so forwarded mouse
   // moves never reach it and the controls would stay hidden forever.
@@ -93,7 +103,9 @@ export function Overlay() {
   }, [playing, wake])
 
   // Keep the controls up while a menu is open, or it closes under the cursor.
-  const shown = playing && (visible || menuOpen || Boolean(state?.paused))
+  // The small window shows its controls only while the pointer is over it,
+  // paused or not: they would otherwise cover most of what it is showing.
+  const shown = playing && (visible || menuOpen || (Boolean(state?.paused) && !pip))
 
   if (!state?.path) return null
 
@@ -104,13 +116,22 @@ export function Overlay() {
 
   return (
     <div
-      className={shown ? 'osd is-shown' : 'osd'}
+      className={['osd', shown && 'is-shown', pip && 'is-pip'].filter(Boolean).join(' ')}
       // The controls, toasts and loading screen take the night light's
       // colour too, so at its strongest nothing over the video gives off
       // blue. Off, there is no filter at all, so nothing is paid for it.
       style={night ? { filter: 'url(#osd-night-tint)' } : undefined}
+      {...pipMove}
+      onMouseLeave={() => {
+        // Gone as soon as the pointer leaves the small window, rather than
+        // hanging over the picture for the idle delay.
+        if (!pip) return
+        if (hideTimer.current) clearTimeout(hideTimer.current)
+        setVisible(false)
+      }}
       onMouseDown={(e) => {
         if (e.currentTarget !== e.target) return
+        if (pip && e.button === 0) return // see usePipMove
         send(describeMouse(e.nativeEvent))
       }}
       onDoubleClick={(e) => {
@@ -180,6 +201,43 @@ export function Overlay() {
         <VolumeLevel step={volumeToast.step} />
       </div>
 
+      {pip ? (
+        <>
+          <PipControls state={state} onActivity={wake} />
+          <PipEdges />
+        </>
+      ) : (
+        <FullControls
+          state={state}
+          shown={shown}
+          nowPlaying={nowPlaying}
+          onMenuOpenChange={setMenuOpen}
+          onActivity={wake}
+        />
+      )}
+
+      {/* Covers the jump between window sizes; see toggleFullscreen in main. */}
+      <div className={dipped ? 'osd-dip is-on' : 'osd-dip'} aria-hidden="true" />
+    </div>
+  )
+}
+
+/** The full player's controls: the way out and what is playing, and the deck. */
+function FullControls({
+  state,
+  shown,
+  nowPlaying,
+  onMenuOpenChange,
+  onActivity
+}: {
+  state: PlaybackState
+  shown: boolean
+  nowPlaying: ReturnType<typeof useNowPlaying>
+  onMenuOpenChange: (open: boolean) => void
+  onActivity: () => void
+}) {
+  return (
+    <>
       {/* Only the button takes the pointer: the band itself lets presses
           through to the video, where they reach the bindings as before. */}
       <div className="osd-top">
@@ -205,13 +263,19 @@ export function Overlay() {
             </>
           )}
         </div>
+        {/* Across from the way out, clear of the title: the other way of
+            leaving this view, for the small window instead of the library. */}
+        <div className="osd-top-end">
+          <Control
+            icon="pip"
+            label="Picture in picture"
+            onClick={() => void window.cassette.togglePip()}
+          />
+        </div>
       </div>
 
-      <ControlBar state={state} shown={shown} onMenuOpenChange={setMenuOpen} onActivity={wake} />
-
-      {/* Covers the jump between window sizes; see toggleFullscreen in main. */}
-      <div className={dipped ? 'osd-dip is-on' : 'osd-dip'} aria-hidden="true" />
-    </div>
+      <ControlBar state={state} shown={shown} onMenuOpenChange={onMenuOpenChange} onActivity={onActivity} />
+    </>
   )
 }
 

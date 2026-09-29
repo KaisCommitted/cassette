@@ -82,9 +82,11 @@ export function ControlsSection({ bindings, onAssign, onUnassign, onReset }: Con
     <Section id="controls" title="Controls">
       <p className="section-intro">
         These work while something is playing. Everywhere else your keys type and move
-        around the library as usual. Pause and hide is the exception: it works from any
-        app, so you can get Cassette out of the way and back. Escape is not listed because
-        it always means back: out of fullscreen first, then out of the player.
+        around the library as usual — including while something plays in picture in
+        picture, unless you click the small window first. Pause and hide is the exception:
+        it works from any app, so you can get Cassette out of the way and back. Escape is
+        not listed because it always means back: out of fullscreen first, then from picture
+        in picture to the full player, then out of the player.
       </p>
 
       {groups.map((group) => (

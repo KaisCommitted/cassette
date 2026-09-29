@@ -37,6 +37,8 @@ export type IconName =
   | 'next'
   | 'night-light'
   | 'pause'
+  | 'pip'
+  | 'pip-exit'
   | 'play'
   | 'plus'
   | 'previous'

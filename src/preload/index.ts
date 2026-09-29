@@ -50,6 +50,13 @@ const api: CassetteApi = {
   nextEpisode: () => invoke<void>(IPC.nextEpisode),
   previousEpisode: () => invoke<void>(IPC.previousEpisode),
   toggleFullscreen: () => invoke<void>(IPC.toggleFullscreen),
+  togglePip: () => invoke<void>(IPC.togglePip),
+  startPipDrag: (kind) => {
+    ipcRenderer.send(IPC.pipDrag, kind)
+  },
+  endPipDrag: () => {
+    ipcRenderer.send(IPC.pipDrag, null)
+  },
 
   setOverlayInteractive: (interactive) => {
     ipcRenderer.send(IPC.setOverlayInteractive, interactive)

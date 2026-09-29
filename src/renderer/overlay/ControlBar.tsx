@@ -414,7 +414,8 @@ function DelayAdjuster({ valueMs, onChange }: { valueMs: number; onChange: (ms: 
   )
 }
 
-function Control({
+/** One of the player's buttons; picture-in-picture uses them too. */
+export function Control({
   icon,
   label,
   onClick,

@@ -24,6 +24,7 @@ import type { SubtitleChoiceStore } from '../state/subtitleChoiceStore'
 import type { MpvController } from '../mpv/mpvController'
 import type { OverlayInteraction } from '../windows/overlayInteraction'
 import type { PlayerViewport } from '../windows/playerViewport'
+import type { PipController, PipDragKind } from '../windows/pipController'
 import type { BindingsStore } from '../input/bindingsStore'
 import type { MetadataStore } from '../tmdb/metadataStore'
 import { TmdbClient } from '../tmdb/tmdbClient'
@@ -38,6 +39,8 @@ export interface AppContext {
   overlayInteraction: OverlayInteraction
   /** Where the two player windows sit, and whether that is the whole display. */
   viewport: PlayerViewport
+  /** Where picture-in-picture opens, and how it floats and is dragged. */
+  pip: PipController
   bindings: BindingsStore
   metadata: MetadataStore
   subtitleChoices: SubtitleChoiceStore
@@ -78,14 +81,23 @@ export async function playItem(
   // The two windows were hidden, and hidden windows follow nothing; put them
   // where the player is before they show.
   ctx.viewport.sync()
-  ctx.videoWindow.show()
-  ctx.overlayWindow.show()
+  if (ctx.viewport.isPip) {
+    // Something new in picture-in-picture — picked in the library, or rolled
+    // into by itself while you work in another app — plays where it is and
+    // takes focus from nothing. show() would activate the controls, and with
+    // them Cassette, over whatever you were doing.
+    if (!ctx.videoWindow.isVisible()) ctx.videoWindow.showInactive()
+    if (!ctx.overlayWindow.isVisible()) ctx.overlayWindow.showInactive()
+  } else {
+    ctx.videoWindow.show()
+    ctx.overlayWindow.show()
+  }
   ctx.overlayInteraction.start()
   // Keyboard focus goes to the library window, or, in fullscreen, to the
   // controls: Windows drops the taskbar behind the active window only if that
   // window covers the display, and the library window no longer does.
   if (ctx.viewport.isFullscreen) ctx.overlayWindow.focus()
-  else ctx.mainWindow.focus()
+  else if (!ctx.viewport.isPip) ctx.mainWindow.focus()
   await ctx.mpv.load(item.path, resumeAt, item.label)
 }
 
@@ -125,18 +137,27 @@ async function closePlayer(ctx: AppContext): Promise<void> {
   ctx.currentKey = null
   ctx.overlayInteraction.stop()
   // Focus may be on the controls, which are about to go; hand it back to the
-  // library rather than leave Windows to pick a window.
+  // library rather than leave Windows to pick a window. Not from
+  // picture-in-picture, though: the library may be minimised or behind
+  // another app, and closing the little window is no reason to raise it.
   const controlsHadFocus = ctx.overlayWindow.isFocused()
+  const wasPip = ctx.viewport.isPip
+  // Back under the library window before it hides, not after: re-hanging a
+  // hidden window showed it again, and closing from picture-in-picture with
+  // the library minimised left a black rectangle on the screen.
+  if (wasPip) ctx.pip.setDetached(false, { restoreLibrary: false })
   ctx.overlayWindow.hide()
   ctx.videoWindow.hide()
-  if (controlsHadFocus && !ctx.mainWindow.isDestroyed()) ctx.mainWindow.focus()
+  if (controlsHadFocus && !wasPip && !ctx.mainWindow.isDestroyed()) ctx.mainWindow.focus()
 
-  // Fullscreen belongs to the player, not the library. Only the two player
-  // windows were covering the display, and they have just been hidden, so
-  // there is nothing to restore but the record of it.
-  if (ctx.viewport.isFullscreen) {
-    ctx.viewport.setFullscreen(false)
+  // Fullscreen and picture-in-picture belong to the player, not the library.
+  // The two player windows have just been hidden, so there is nothing to
+  // restore but the record of them, and the video window's place under the
+  // library window, ready for next time.
+  if (ctx.viewport.mode !== 'window') {
+    ctx.viewport.reset()
     ctx.mpv.setFullscreen(false)
+    ctx.mpv.setPip(false)
   }
 
   // Ask for a repaint: on this compositing path nothing repaints what the two
@@ -183,6 +204,19 @@ const SETTLE_MS = 340
 let switchingScreen = false
 
 /**
+ * Whether the player is up and staying up, for a change of size to act on.
+ *
+ * Asked again after the dip as well as before it: the player can close in
+ * those 200 ms (Escape, then F or P straight after), and a switch that went
+ * ahead regardless re-hung hidden windows — the next title then opened in
+ * picture-in-picture, and the video window floated always-on-top with
+ * nothing playing in it.
+ */
+function playerStaysUp(ctx: AppContext): boolean {
+  return !closing && Boolean(ctx.mpv.getState().path) && ctx.overlayWindow.isVisible()
+}
+
+/**
  * Goes in or out of fullscreen behind a quick dip to black.
  *
  * Fullscreen is the two player windows growing to cover the display at once
@@ -193,10 +227,8 @@ let switchingScreen = false
  * what makes it read as one movement rather than a glitch.
  */
 export async function toggleFullscreen(ctx: AppContext): Promise<void> {
-  if (switchingScreen) return
   // Fullscreen belongs to the player; with it closed there is nothing to grow.
-  const playing = Boolean(ctx.mpv.getState().path) && ctx.overlayWindow.isVisible()
-  if (!playing) return
+  if (switchingScreen || !playerStaysUp(ctx)) return
   const next = !ctx.viewport.isFullscreen
 
   switchingScreen = true
@@ -206,15 +238,68 @@ export async function toggleFullscreen(ctx: AppContext): Promise<void> {
   try {
     tell('out')
     await wait(DIP_MS)
+    if (!playerStaysUp(ctx)) return
+    // Fullscreen hangs off the library window like the windowed player, so
+    // that Alt-Tab to another app takes it away; picture-in-picture, which
+    // fullscreen may be leaving or returning to, floats on its own.
+    if (next) ctx.pip.setDetached(false)
     ctx.viewport.setFullscreen(next)
     ctx.mpv.setFullscreen(next)
+    ctx.mpv.setPip(ctx.viewport.isPip)
+    if (ctx.viewport.isPip) {
+      ctx.pip.setDetached(true)
+      // Another episode may have rolled on, in another shape, while it was
+      // fullscreen.
+      ctx.pip.reshapeTo()
+    }
     // Windows drops the taskbar behind the active window only while that
     // window covers the display. The library window does not, so the
     // controls, which do, take focus; they answer the same keys.
     if (next && !ctx.overlayWindow.isDestroyed()) ctx.overlayWindow.focus()
     await wait(SETTLE_MS)
   } finally {
-    tell('in')
+    // A close under way keeps its own dip to black.
+    if (!closing) tell('in')
+    switchingScreen = false
+  }
+}
+
+/**
+ * Into picture-in-picture — from the windowed player or from fullscreen —
+ * or out of it to the full player, behind the same dip to black as
+ * fullscreen.
+ *
+ * The library is left with focus either way: going small is for getting on
+ * with something else, and coming back is to the library-sized player.
+ */
+export async function togglePip(ctx: AppContext): Promise<void> {
+  if (switchingScreen || !playerStaysUp(ctx)) return
+  const next = !ctx.viewport.isPip
+
+  switchingScreen = true
+  const tell = (phase: 'out' | 'in'): void => {
+    if (!ctx.overlayWindow.isDestroyed()) ctx.overlayWindow.webContents.send(IPC.screenTransition, phase)
+  }
+  try {
+    tell('out')
+    await wait(DIP_MS)
+    if (!playerStaysUp(ctx)) return
+    if (next) {
+      ctx.viewport.setPip(ctx.pip.openingBounds())
+      ctx.pip.setDetached(true)
+    } else {
+      // The library first: it may be minimised, and the player is about to
+      // be placed over it.
+      ctx.pip.setDetached(false)
+      ctx.viewport.setPip(null)
+    }
+    ctx.mpv.setFullscreen(false)
+    ctx.mpv.setPip(next)
+    if (!ctx.mainWindow.isDestroyed()) ctx.mainWindow.focus()
+    await wait(SETTLE_MS)
+  } finally {
+    // A close under way keeps its own dip to black.
+    if (!closing) tell('in')
     switchingScreen = false
   }
 }
@@ -377,6 +462,13 @@ export function registerHandlers(ctx: AppContext): void {
   })
 
   handle(IPC.toggleFullscreen, () => toggleFullscreen(ctx))
+  handle(IPC.togglePip, () => togglePip(ctx))
+  // Plain messages, like the overlay's own: a drag must start the moment the
+  // pointer goes down. Null lets go.
+  ipcMain.on(IPC.pipDrag, (_e, kind: PipDragKind | null) => {
+    if (kind) ctx.pip.startDrag(kind)
+    else ctx.pip.endDrag()
+  })
 
   handle(IPC.updateSettings, async (changes: Partial<Settings>) => {
     const next = await ctx.settings.patch(changes)

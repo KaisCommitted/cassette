@@ -5,6 +5,7 @@ import { describeKey } from './input/descriptors'
 import { BindingsStore } from './input/bindingsStore'
 import { GlobalHotkeyMachine } from './input/globalHotkey'
 import { startNativeHook } from './input/nativeHook'
+import { keyOwner } from './input/keyRouting'
 import { findNext, findPrevious } from './library/playQueue'
 import { NightLight, nightLightLook } from './player/nightLight'
 import { SleepTimer } from './player/sleepTimer'
@@ -18,6 +19,7 @@ import {
   registerHandlers,
   stopPlayback,
   toggleFullscreen,
+  togglePip,
   type AppContext
 } from './ipc/handlers'
 import { MpvController } from './mpv/mpvController'
@@ -30,6 +32,7 @@ import {
   libraryFile,
   cleanupStaleTemps,
   migrateLegacyData,
+  pipFile,
   progressFile,
   settingsFile,
   subtitleChoicesFile
@@ -39,6 +42,7 @@ import { createOverlayWindow } from './windows/overlayWindow'
 import { createVideoWindow } from './windows/videoWindow'
 import { createOverlayInteraction } from './windows/overlayInteraction'
 import { PlayerViewport } from './windows/playerViewport'
+import { PipController } from './windows/pipController'
 import { ThumbnailService } from './thumbs/thumbnails'
 import { serveThumbnails } from './thumbs/thumbProtocol'
 import { MetadataStore } from './tmdb/metadataStore'
@@ -213,6 +217,14 @@ async function bootstrap(): Promise<void> {
 
   const overlayInteraction = createOverlayInteraction(mainWindow, overlayWindow, viewport)
   const mpv = new MpvController()
+  const pip = new PipController({
+    main: mainWindow,
+    video: videoWindow,
+    viewport,
+    aspect: () => mpv.aspect,
+    file: pipFile()
+  })
+  await pip.load()
 
   // Handlers must be registered before the renderer mounts and starts calling
   // them. Starting mpv takes hundreds of milliseconds, so it must not come
@@ -291,6 +303,7 @@ async function bootstrap(): Promise<void> {
     overlayWindow,
     overlayInteraction,
     viewport,
+    pip,
     currentKey: null,
     library: await readJson<Library | null>(libraryFile(), null)
   }
@@ -328,26 +341,49 @@ async function bootstrap(): Promise<void> {
 
   const hotkey = new GlobalHotkeyMachine({
     isArmed: () => Boolean(mpv.getState().path) && !mpv.getState().paused,
-    isAppFocused: () => mainWindow.isVisible(),
+    // Picture-in-picture counts as Cassette on screen even with the library
+    // minimised, since it is what is playing in front of you.
+    isAppFocused: () => mainWindow.isVisible() || (viewport.isPip && videoWindow.isVisible()),
     pauseAndHide: async () => {
+      // Pressed mid-drag, the window must not go on following the cursor
+      // while hidden.
+      pip.endDrag()
       await mpv.setPaused(true)
       overlayWindow.hide()
       videoWindow.hide()
-      mainWindow.hide()
+      // A library minimised under picture-in-picture is out of sight already,
+      // and stays minimised rather than coming back restored.
+      if (!(viewport.isPip && mainWindow.isMinimized())) mainWindow.hide()
     },
     restoreAndResume: async () => {
-      mainWindow.show()
-      videoWindow.show()
-      overlayWindow.show()
-      mainWindow.focus()
+      if (viewport.isPip && mainWindow.isMinimized()) {
+        videoWindow.showInactive()
+        overlayWindow.showInactive()
+      } else {
+        mainWindow.show()
+        videoWindow.show()
+        overlayWindow.show()
+        mainWindow.focus()
+      }
       await mpv.setPaused(false)
     }
   })
 
   stopHook = startNativeHook({
     globalDescriptor: () => bindings.descriptorsFor('hideAndPause')[0] ?? null,
-    onTrigger: () => void hotkey.trigger()
+    onTrigger: () => void hotkey.trigger(),
+    // The last word on a picture-in-picture drag: the button coming up,
+    // seen at OS level whatever happened to the page's own pointer events.
+    onPrimaryUp: () => pip.endDrag()
   })
+
+  // A drag also ends if the controls lose focus or go away under it — an
+  // Alt-Tab or the Windows key mid-drag, or the window being hidden.
+  overlayWindow.on('blur', () => pip.endDrag())
+  overlayWindow.on('hide', () => pip.endDrag())
+
+  // Displays unplugged, rearranged or rescaled under picture-in-picture.
+  pip.watchDisplays()
 
   /**
    * Runs a bound action and absorbs whatever it throws.
@@ -415,6 +451,9 @@ async function bootstrap(): Promise<void> {
         await settings.patch({ nightLight: !settings.get().nightLight })
         publishSessionFlags()
         return
+      case 'togglePip':
+        if (ctx) await togglePip(ctx)
+        return
       case 'hideAndPause':
         await hotkey.trigger()
         return
@@ -443,6 +482,7 @@ async function bootstrap(): Promise<void> {
     'subtitleDelayUp',
     'nextEpisode',
     'previousEpisode',
+    'togglePip',
     'stop'
   ])
 
@@ -461,22 +501,28 @@ async function bootstrap(): Promise<void> {
   // focus, which is exactly the scope we want — nothing here is global. The
   // player controls take focus when clicked (see createOverlayWindow), so they
   // answer the same bindings as the main window.
-  const onKey = (event: Electron.Event, input: Electron.Input): void => {
+  const onKey = (from: 'library' | 'player', event: Electron.Event, input: Electron.Input): void => {
     if (input.type !== 'keyDown') return
-    // Bindings drive the player and nothing else. With nothing playing,
-    // every key belongs to the page: to typing in search, to Tab and Enter,
-    // and to the settings screen listening for a new binding. This used to
-    // hold back only seek-style actions, so M, F and the arrows were taken
-    // from the search box — typing "amen" left "aen" and muted the player.
-    if (!mpv.getState().path || typing) return
+    // The page's keys stay the page's: see keyOwner for which those are.
+    const owner = keyOwner({
+      from,
+      key: input.key,
+      playing: Boolean(mpv.getState().path),
+      typing,
+      pip: viewport.isPip
+    })
+    if (owner === 'page') return
 
     // Escape is back, one step at a time: out of fullscreen if the player is
-    // fullscreen, otherwise out of the player to the episode you were on. It
-    // is not a binding, so it cannot be moved or lost.
+    // fullscreen, from picture-in-picture to the full player, otherwise out
+    // of the player to the episode you were on. It is not a binding, so it
+    // cannot be moved or lost.
     if (input.key === 'Escape' && !input.control && !input.alt && !input.shift && !input.meta) {
       event.preventDefault()
       if (viewport.isFullscreen) {
         if (ctx) void toggleFullscreen(ctx).catch(() => undefined)
+      } else if (viewport.isPip) {
+        if (ctx) void togglePip(ctx).catch(() => undefined)
       } else {
         runActionSafely('stop')
       }
@@ -498,8 +544,8 @@ async function bootstrap(): Promise<void> {
     event.preventDefault()
     runActionSafely(action)
   }
-  mainWindow.webContents.on('before-input-event', onKey)
-  overlayWindow.webContents.on('before-input-event', onKey)
+  mainWindow.webContents.on('before-input-event', (event, input) => onKey('library', event, input))
+  overlayWindow.webContents.on('before-input-event', (event, input) => onKey('player', event, input))
 
   // Mouse bindings arrive as descriptors from the overlay, which covers the
   // video while playing. They resolve through exactly the same table as keys.
@@ -510,6 +556,12 @@ async function bootstrap(): Promise<void> {
     if (!action || action === 'hideAndPause') return
     if (playerOnly.has(action) && !mpv.getState().path) return
     runActionSafely(action)
+  })
+
+  // A new file of another shape reshapes picture-in-picture to fit it,
+  // rather than letterboxing it inside the old one.
+  mpv.on('aspect', (aspect: number | null) => {
+    if (aspect) pip.reshapeTo(aspect)
   })
 
   // Back/forward 10 seconds and 1 minute land somewhere the picture does not

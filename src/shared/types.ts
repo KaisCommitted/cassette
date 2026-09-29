@@ -186,6 +186,8 @@ export interface PlaybackState {
   speed: number
   subtitleDelayMs: number
   fullscreen: boolean
+  /** Playing in the small floating window, with the library free underneath. */
+  pip: boolean
   tracks: TrackInfo[]
   subtitleTrackId: number | null
   audioTrackId: number | null
@@ -282,6 +284,14 @@ export interface CassetteApi {
   nextEpisode: () => Promise<void>
   previousEpisode: () => Promise<void>
   toggleFullscreen: () => Promise<void>
+  /** Into picture-in-picture, or out of it back to the full player. */
+  togglePip: () => Promise<void>
+  /**
+   * Starts moving the picture-in-picture window, or resizing it from an edge
+   * or corner, following the pointer until `endPipDrag`.
+   */
+  startPipDrag: (kind: 'move' | 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw') => void
+  endPipDrag: () => void
 
   /** Lets the click-through overlay accept clicks while over its controls. */
   setOverlayInteractive: (interactive: boolean) => void
@@ -368,6 +378,8 @@ export const IPC = {
   nextEpisode: 'player:next',
   previousEpisode: 'player:previous',
   toggleFullscreen: 'player:toggleFullscreen',
+  togglePip: 'player:togglePip',
+  pipDrag: 'pip:drag',
   screenTransition: 'player:screenTransition',
   seekJump: 'player:seekJump',
   volumeStep: 'player:volumeStep',
@@ -432,13 +444,15 @@ export const ACTIONS: ActionDefinition[] = [
   { id: 'previousEpisode', label: 'Previous episode', group: 'Navigation' },
   { id: 'stop', label: 'Close the player', group: 'Navigation' },
   // Escape is not in this list on purpose: it always means "back" — out of
-  // fullscreen first, then out of the player — and is not rebindable.
+  // fullscreen first, then from picture-in-picture to the full player, then
+  // out of the player — and is not rebindable.
   { id: 'cycleSubtitleTrack', label: 'Next subtitle track', group: 'Subtitles and audio' },
   { id: 'cycleAudioTrack', label: 'Next audio track', group: 'Subtitles and audio' },
   { id: 'subtitleDelayDown', label: 'Subtitles 50 ms earlier', group: 'Subtitles and audio' },
   { id: 'subtitleDelayUp', label: 'Subtitles 50 ms later', group: 'Subtitles and audio' },
   { id: 'toggleNightLight', label: 'Night light', group: 'Window' },
   { id: 'toggleFullscreen', label: 'Fullscreen', group: 'Window' },
+  { id: 'togglePip', label: 'Picture in picture', group: 'Window' },
   { id: 'hideAndPause', label: 'Pause and hide (works anywhere)', group: 'Window' }
 ]
 
@@ -455,6 +469,7 @@ export const ACTIONS: ActionDefinition[] = [
 export const DEFAULT_BINDINGS: KeyBindings = {
   'key:Space': 'playPause',
   'key:f': 'toggleFullscreen',
+  'key:p': 'togglePip',
   'key:Left': 'seekShortBack',
   'key:Right': 'seekShortForward',
   'key:Ctrl+Left': 'seekMediumBack',

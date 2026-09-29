@@ -83,3 +83,6 @@ export const artDir = (): string => join(cacheDir(), 'art')
 export const probeFile = (): string => join(dataDir(), 'probe.json')
 
 export const subtitleChoicesFile = (): string => join(dataDir(), 'subtitleChoices.json')
+
+/** Where the picture-in-picture window was left, to open there next time. */
+export const pipFile = (): string => join(dataDir(), 'pip.json')

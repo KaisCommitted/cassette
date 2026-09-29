@@ -33,7 +33,9 @@ const OBSERVED = [
   'sid',
   'aid',
   'track-list',
-  'chapter-list'
+  'chapter-list',
+  // The picture's shape, for the picture-in-picture window to take on.
+  'video-params/aspect'
 ] as const
 
 /** Shape of one entry in mpv's `track-list` property. */
@@ -64,6 +66,7 @@ function emptyState(): PlaybackState {
     speed: 1,
     subtitleDelayMs: 0,
     fullscreen: false,
+    pip: false,
     tracks: [],
     subtitleTrackId: null,
     audioTrackId: null,
@@ -106,6 +109,8 @@ export class MpvController extends EventEmitter {
   private subtitleApplied: SubtitleLook | null = null
   /** The styles of the styled track on screen, read once per track. */
   private assStyles: { track: string; styles: AssStyleColours[] | null } | null = null
+  /** Width over height of the picture playing, or null before one is known. */
+  private videoAspect: number | null = null
 
   async start(hwnd: Buffer, legacyCompositing = true): Promise<void> {
     const proc = await startMpv(hwnd, legacyCompositing)
@@ -193,6 +198,12 @@ export class MpvController extends EventEmitter {
       case 'chapter-list':
         this.state.chapterCount = Array.isArray(value) ? value.length : 0
         break
+      case 'video-params/aspect':
+        // Not part of what the overlay draws, so it is told apart from the
+        // state rather than resending all of it.
+        this.videoAspect = typeof value === 'number' && value > 0 ? value : null
+        this.emit('aspect', this.videoAspect)
+        return
       default:
         return
     }
@@ -754,6 +765,16 @@ export class MpvController extends EventEmitter {
   setFullscreen(fullscreen: boolean): void {
     this.state.fullscreen = fullscreen
     this.emit('state', this.getState())
+  }
+
+  setPip(pip: boolean): void {
+    this.state.pip = pip
+    this.emit('state', this.getState())
+  }
+
+  /** Width over height of the picture playing, or null before one is known. */
+  get aspect(): number | null {
+    return this.videoAspect
   }
 
   getState(): PlaybackState {
