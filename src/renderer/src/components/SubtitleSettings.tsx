@@ -148,7 +148,7 @@ export function SubtitleSettings({ settings, onChange, previewArt }: SubtitleSet
   )
 }
 
-function Slider({
+export function Slider({
   id,
   label,
   min,

@@ -35,6 +35,7 @@ export type IconName =
   | 'minus'
   | 'mute'
   | 'next'
+  | 'night-light'
   | 'pause'
   | 'play'
   | 'plus'

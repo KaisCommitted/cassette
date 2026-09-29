@@ -2,9 +2,25 @@ import { EventEmitter } from 'node:events'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { app } from 'electron'
-import { VOLUME_MAX, type PlaybackState, type SubtitleStyle, type TrackInfo } from '@shared/types'
+import {
+  DEFAULT_SETTINGS,
+  VOLUME_MAX,
+  type NightLightState,
+  type PlaybackState,
+  type SubtitleStyle,
+  type TrackInfo
+} from '@shared/types'
 import { MpvIpc } from './mpvIpc'
 import { startMpv, type MpvProcess } from './mpvProcess'
+import {
+  coarseTint,
+  parseAssStyles,
+  subtitleCommands,
+  subtitleLook,
+  type AssStyleColours,
+  type NightTint,
+  type SubtitleLook
+} from './subtitleTint'
 
 const OBSERVED = [
   'time-pos',
@@ -55,21 +71,41 @@ function emptyState(): PlaybackState {
     hasPrevious: false,
     sleepRemainingSeconds: null,
     sleepAfterEpisode: false,
-    nightLight: null,
+    nightLight: {
+      on: false,
+      intensity: DEFAULT_SETTINGS.nightLightIntensity,
+      withTimer: false,
+      look: null
+    },
     autoplayNext: true,
     chapterCount: 0,
     loading: false
   }
 }
 
+/** The shortest gap between two retints of the subtitles by the night light. */
+const SUBTITLE_TINT_GAP_MS = 300
+
 export class MpvController extends EventEmitter {
   private proc: MpvProcess | null = null
   private ipc: MpvIpc | null = null
   private state: PlaybackState = emptyState()
-  /** Path of the warmth shader once written, and whether mpv has it loaded. */
+  /** Path of the night light shader once written, and whether mpv has it loaded. */
   private warmShader: string | null = null
   private warmShaderLoaded = false
-  private warmthApplied = -1
+  private warmthApplied = ''
+  /**
+   * The subtitle appearance last asked for, and the night light's tint over
+   * it: subtitles are coloured to match the picture rather than warmed by the
+   * shader (see subtitleTint.ts). No appearance until the first file asks
+   * for one, so nothing is sent from a made-up default in the meantime.
+   */
+  private subtitleStyle: SubtitleStyle | null = null
+  private subtitleTint: NightTint | null = null
+  /** What mpv was last told, once it said yes; null means tell it everything. */
+  private subtitleApplied: SubtitleLook | null = null
+  /** The styles of the styled track on screen, read once per track. */
+  private assStyles: { track: string; styles: AssStyleColours[] | null } | null = null
 
   async start(hwnd: Buffer, legacyCompositing = true): Promise<void> {
     const proc = await startMpv(hwnd, legacyCompositing)
@@ -86,6 +122,10 @@ export class MpvController extends EventEmitter {
   async attach(ipc: MpvIpc): Promise<void> {
     this.ipc = ipc
     this.gone = false
+    // A new mpv starts without the night light, whatever the last one had.
+    this.warmShaderLoaded = false
+    this.warmthApplied = ''
+    this.subtitleApplied = null
     ipc.on('property', (name: string, value: unknown) => {
       this.onProperty(name, value)
     })
@@ -141,12 +181,14 @@ export class MpvController extends EventEmitter {
         break
       case 'sid':
         this.state.subtitleTrackId = typeof value === 'number' ? value : null
+        this.onSubtitleTrackChanged()
         break
       case 'aid':
         this.state.audioTrackId = typeof value === 'number' ? value : null
         break
       case 'track-list':
         this.state.tracks = Array.isArray(value) ? mapTracks(value as RawTrack[]) : []
+        this.onSubtitleTrackChanged()
         break
       case 'chapter-list':
         this.state.chapterCount = Array.isArray(value) ? value.length : 0
@@ -259,8 +301,10 @@ export class MpvController extends EventEmitter {
 
   /** Back to nothing playing, keeping only what belongs to the user. */
   private forgetFile(): void {
-    const { volume, muted } = this.state
-    this.state = { ...emptyState(), volume, muted }
+    // The night light too: the next file opening untouched for a moment,
+    // until the next update came round, flashed the room.
+    const { volume, muted, nightLight } = this.state
+    this.state = { ...emptyState(), volume, muted, nightLight }
     this.emit('state', this.getState())
   }
 
@@ -455,24 +499,96 @@ export class MpvController extends EventEmitter {
    * subtitles at all. Left alone, styled subtitles keep their own fonts and
    * positioning, which is usually what you want because signs and karaoke are
    * authored deliberately. Forcing the override restyles them like plain text.
+   *
+   * Colours, position, size and that override go through
+   * refreshSubtitles, which lays the night light's tint over them.
    */
   async applySubtitleStyle(style: SubtitleStyle): Promise<void> {
-    await this.send(['set_property', 'sub-scale', style.scale])
-    await this.send(['set_property', 'sub-color', style.color])
-    await this.send(['set_property', 'sub-border-color', style.outlineColor])
+    this.subtitleStyle = style
     await this.send(['set_property', 'sub-border-size', style.outlineSize])
     await this.send([
       'set_property',
       'sub-back-color',
       withAlpha(style.outlineColor === style.color ? '#000000' : '#000000', style.backgroundOpacity)
     ])
-    // sub-pos counts from the top, so 100 sits on the bottom edge.
-    await this.send(['set_property', 'sub-pos', 100 - Math.round(style.marginPercent)])
-    await this.send([
-      'set_property',
-      'sub-ass-override',
-      style.overrideEmbeddedStyles ? 'force' : 'no'
-    ])
+    await this.refreshSubtitles()
+  }
+
+  /**
+   * Brings mpv's subtitle properties in line with the appearance settings,
+   * the night light and the track on screen; see subtitleTint.ts.
+   *
+   * Asked for from several places at once (a fade, a track change, a new
+   * file), so only one runs at a time, and whatever was asked for while it
+   * ran is done once, afterwards, with everything as it then stands.
+   */
+  private refreshSubtitles(): Promise<void> {
+    this.subtitlesWanted = true
+    this.subtitlesRun ??= this.drainSubtitles().finally(() => {
+      this.subtitlesRun = null
+    })
+    return this.subtitlesRun
+  }
+
+  private subtitlesWanted = false
+  private subtitlesRun: Promise<void> | null = null
+
+  private async drainSubtitles(): Promise<void> {
+    let failure: unknown = null
+    while (this.subtitlesWanted) {
+      this.subtitlesWanted = false
+      try {
+        await this.applySubtitleLook()
+      } catch (error) {
+        failure = error
+      }
+    }
+    if (failure) throw failure
+  }
+
+  private async applySubtitleLook(): Promise<void> {
+    // Until a file has asked for its appearance there is nothing right to
+    // send; the first applySubtitleStyle brings the tint in with it.
+    if (!this.ipc || !this.subtitleStyle) return
+    const tint = this.subtitleTint
+    const styles = tint && !this.subtitleStyle.overrideEmbeddedStyles ? await this.currentAssStyles() : null
+    const next = subtitleLook(this.subtitleStyle, tint, styles)
+    for (const command of subtitleCommands(this.subtitleApplied, next)) {
+      try {
+        await this.send(command)
+      } catch (error) {
+        // Part of the way there: start from scratch next time.
+        this.subtitleApplied = null
+        throw error
+      }
+    }
+    this.subtitleApplied = next
+  }
+
+  /** The styles of the track on screen when it is a styled one, else null. */
+  private async currentAssStyles(): Promise<AssStyleColours[] | null> {
+    const id = this.state.subtitleTrackId
+    const track = this.state.tracks.find((t) => t.type === 'sub' && t.id === id)
+    if (!track || (track.codec !== 'ass' && track.codec !== 'ssa')) return null
+    const key = `${this.state.path}|${id}`
+    if (this.assStyles?.track === key) return this.assStyles.styles
+    const header = await this.send<unknown>(['get_property', 'sub-ass-extradata']).catch(() => null)
+    // Not there yet (the track still opening): ask again next time.
+    if (typeof header !== 'string') return null
+    const styles = parseAssStyles(header)
+    this.assStyles = { track: key, styles: styles.length > 0 ? styles : null }
+    return this.assStyles.styles
+  }
+
+  /**
+   * Another subtitle track, or file: while the night light is tinting, the
+   * new track may need the other way of tinting, or none.
+   */
+  private onSubtitleTrackChanged(): void {
+    if (!this.subtitleTint && this.subtitleApplied?.override !== 'yes') return
+    void this.refreshSubtitles().catch((error: Error) => {
+      console.error('[cassette] subtitle night light failed:', error.message)
+    })
   }
 
   /**
@@ -493,7 +609,7 @@ export class MpvController extends EventEmitter {
   setSessionFlags(flags: {
     sleepRemainingSeconds: number | null
     sleepAfterEpisode: boolean
-    nightLight: PlaybackState['nightLight']
+    nightLight: NightLightState
     autoplayNext: boolean
   }): void {
     this.state.sleepRemainingSeconds = flags.sleepRemainingSeconds
@@ -504,31 +620,118 @@ export class MpvController extends EventEmitter {
   }
 
   /**
-   * Warms the picture, from 0 (untouched) to 1 (fully warm); null removes it.
+   * Warms the picture, and the subtitles over it, by letting less green and
+   * blue through, each 0 to 1; null puts both back.
    *
    * A shader rather than a filter: changing `vf` rebuilds the filter chain
    * and hitches playback, and a filter would need hardware-decoded frames
    * copied back from the GPU. The shader's strength is a parameter, so
-   * ramping it up is a uniform changing, not a recompile. It is only loaded
+   * fading it is a uniform changing, not a recompile. It is only loaded
    * while in use, so an ordinary evening pays nothing for it.
+   *
+   * mpv draws subtitles after the shader has run, so white text kept all its
+   * blue over an amber picture. Blending them into the picture first
+   * (`blend-subtitles`) does not help with this renderer: they are still
+   * drawn after the shader, and are moved off the black bars besides. So
+   * they are recoloured instead, by the same amounts; see subtitleTint.ts.
    */
-  async setWarmth(warmth: number | null): Promise<void> {
-    if (warmth === null) {
+  setNightLight(look: NightTint | null): Promise<void> {
+    // Only the newest look matters. A fade sends one twenty times a second;
+    // queueing them all behind a busy mpv (opening a file, say) left the
+    // picture seconds behind and everything else waiting behind it.
+    this.nightLightWanted = { look }
+    this.nightLightRun ??= this.drainNightLight().finally(() => {
+      this.nightLightRun = null
+    })
+    return this.nightLightRun
+  }
+
+  private nightLightWanted: { look: NightTint | null } | null = null
+  private nightLightRun: Promise<void> | null = null
+
+  private async drainNightLight(): Promise<void> {
+    let failure: unknown = null
+    while (this.nightLightWanted) {
+      const { look } = this.nightLightWanted
+      this.nightLightWanted = null
+      try {
+        await this.applyNightLight(look)
+      } catch (error) {
+        failure = error
+      }
+    }
+    if (failure) throw failure
+  }
+
+  private async applyNightLight(look: NightTint | null): Promise<void> {
+    // Before mpv is up there is nothing to apply it to; the first update
+    // after it starts brings it in.
+    if (!this.ipc) return
+    // The shader follows every frame, which costs next to nothing. The
+    // subtitles follow in coarse steps, at most a few a second, and always
+    // end on the latest.
+    const tint = coarseTint(look)
+    if (
+      tint?.green !== this.subtitleTintWanted?.green ||
+      tint?.blue !== this.subtitleTintWanted?.blue ||
+      !this.subtitleApplied
+    ) {
+      this.subtitleTintWanted = tint
+      this.queueSubtitleTint()
+    }
+    await this.applyWarmShader(look)
+  }
+
+  /** The coarse tint the subtitles are heading for, and when they last changed. */
+  private subtitleTintWanted: NightTint | null = null
+  private subtitleTintAt = 0
+  private subtitleTintTimer: ReturnType<typeof setTimeout> | null = null
+
+  /**
+   * Retints the subtitles now, or, if they changed moments ago, once the gap
+   * is up, with whatever is wanted by then. Several steps crossed in quick
+   * succession — a fade, a slider being dragged — become a few updates.
+   */
+  private queueSubtitleTint(): void {
+    if (this.subtitleTintTimer) return
+    const wait = Math.max(0, this.subtitleTintAt + SUBTITLE_TINT_GAP_MS - Date.now())
+    this.subtitleTintTimer = setTimeout(() => {
+      this.subtitleTintTimer = null
+      this.subtitleTintAt = Date.now()
+      this.subtitleTint = this.subtitleTintWanted
+      void this.refreshSubtitles().catch((error: Error) => {
+        console.error('[cassette] subtitle night light failed:', error.message)
+        // Nothing may come along to ask again once the night light has
+        // settled, so try again after the gap.
+        if (this.ipc) this.queueSubtitleTint()
+      })
+    }, wait)
+    this.subtitleTintTimer.unref?.()
+  }
+
+  /**
+   * The picture's half of the night light. Each step is recorded only once
+   * mpv has taken it, so one that failed is tried again with the next update
+   * rather than taken as done.
+   */
+  private async applyWarmShader(look: NightTint | null): Promise<void> {
+    if (look === null) {
       if (!this.warmShaderLoaded || !this.warmShader) return
-      this.warmShaderLoaded = false
-      this.warmthApplied = -1
       await this.send(['change-list', 'glsl-shaders', 'remove', this.warmShader])
+      this.warmShaderLoaded = false
+      this.warmthApplied = ''
       return
     }
-    const value = Math.round(Math.max(0, Math.min(1, warmth)) * 100) / 100
-    if (value === this.warmthApplied && this.warmShaderLoaded) return
-    this.warmthApplied = value
+    const channel = (v: number): string => Math.max(0, Math.min(1, v)).toFixed(3)
+    const opts = `green=${channel(look.green)},blue=${channel(look.blue)}`
+    if (opts === this.warmthApplied && this.warmShaderLoaded) return
     // Set before loading, so the shader never shows a frame at its default.
-    await this.send(['set_property', 'glsl-shader-opts', `warmth=${value.toFixed(2)}`])
+    await this.send(['set_property', 'glsl-shader-opts', opts])
+    this.warmthApplied = opts
     if (!this.warmShaderLoaded) {
       this.warmShader ??= await writeWarmShader()
-      this.warmShaderLoaded = true
       await this.send(['change-list', 'glsl-shaders', 'append', this.warmShader])
+      this.warmShaderLoaded = true
     }
   }
 
@@ -595,25 +798,33 @@ function withAlpha(hex: string, opacity: number): string {
 }
 
 /**
- * The night light: a gentle cut to green and a deeper one to blue, the way a
- * screen's own night mode shifts, scaled by `warmth`.
+ * The night light: a cut to green and a deeper one to blue, the way a
+ * screen's own night mode shifts. At its strongest no blue gets through.
  *
- * It runs on the finished picture, before subtitles are drawn over it, so
- * subtitles keep their colour; the overlay's dimming covers them as well.
+ * It runs on the finished picture. Subtitles are drawn after it and are
+ * recoloured to match instead (see setNightLight); the overlay's dimming
+ * covers both.
  */
-const WARM_SHADER = `//!PARAM warmth
-//!DESC How warm the picture is, 0 to 1
+const WARM_SHADER = `//!PARAM green
+//!DESC How much green light gets through, 0 to 1
 //!TYPE float
 //!MINIMUM 0.0
 //!MAXIMUM 1.0
-0.0
+1.0
+
+//!PARAM blue
+//!DESC How much blue light gets through, 0 to 1
+//!TYPE float
+//!MINIMUM 0.0
+//!MAXIMUM 1.0
+1.0
 
 //!HOOK OUTPUT
 //!BIND HOOKED
 //!DESC Cassette night light
 vec4 hook() {
     vec4 color = HOOKED_tex(HOOKED_pos);
-    color.rgb *= mix(vec3(1.0), vec3(1.0, 0.82, 0.58), warmth);
+    color.rgb *= vec3(1.0, green, blue);
     return color;
 }
 `

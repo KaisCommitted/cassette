@@ -8,7 +8,7 @@ import {
   type ScanProgressInfo,
   type Settings
 } from '@shared/types'
-import { SubtitleSettings } from '../components/SubtitleSettings'
+import { Slider, SubtitleSettings } from '../components/SubtitleSettings'
 import { DraftInput, Section, SwitchRow } from '../components/SettingsParts'
 import { ControlsSection } from '../components/ControlsSection'
 import { Icon, Logo } from '../../shared/Icon'
@@ -36,6 +36,7 @@ export interface SettingsViewProps {
 const SECTIONS = [
   { id: 'folder', title: 'Media folder' },
   { id: 'playback', title: 'Playback' },
+  { id: 'night-light', title: 'Night light' },
   { id: 'subtitles', title: 'Subtitles' },
   { id: 'appearance', title: 'Subtitle appearance' },
   { id: 'services', title: 'Online services' },
@@ -146,9 +147,35 @@ export function SettingsView(props: SettingsViewProps) {
                   checked={settings.nightAudio}
                   onChange={(v) => props.onChangeSettings({ nightAudio: v })}
                 />
+              </Section>
+
+              <Section id="night-light" title="Night light">
                 <SwitchRow
-                  label="Dim the picture while a sleep timer runs"
-                  help="Warms the colours like a night light and darkens the picture gradually over ten minutes. Cancelling the timer or changing episode yourself puts it back."
+                  label="Night light"
+                  help="Warms the colours and darkens the picture, for watching in a dark room. It stays on, from one episode to the next and after closing Cassette, until you turn it off. Also in the player's controls, and on the N key unless you change it under Controls."
+                  checked={settings.nightLight}
+                  onChange={(v) => props.onChangeSettings({ nightLight: v })}
+                />
+                <div className="setting-row setting-row-stacked night-light-intensity">
+                  <Slider
+                    id="night-light-intensity"
+                    label="Intensity"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={settings.nightLightIntensity}
+                    display={`${Math.round(settings.nightLightIntensity * 100)}%`}
+                    onChange={(v) => props.onChangeSettings({ nightLightIntensity: v })}
+                  />
+                  <span className="setting-help">
+                    From a gentle warmth, barely any darker, to deep amber with no blue light at
+                    all and most of the brightness gone. Easiest to set from the player's night
+                    light menu, where the picture changes as you drag.
+                  </span>
+                </div>
+                <SwitchRow
+                  label="Turn it on with the sleep timer"
+                  help="Setting a sleep timer brings the night light in, darkening gradually over ten minutes. Cancelling the timer or changing episode yourself puts the picture back, unless the night light was already on."
                   checked={settings.sleepNightLight}
                   onChange={(v) => props.onChangeSettings({ sleepNightLight: v })}
                 />

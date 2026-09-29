@@ -9,6 +9,7 @@ import {
 import { AnimatePresence, motion } from 'motion/react'
 import type { PlaybackState } from '@shared/types'
 import { formatTime, trackLabel } from './format'
+import { NightLightMenu, OsdSwitch } from './NightLightMenu'
 import { SeekBar } from './SeekBar'
 import { TrackMenu } from './TrackMenu'
 import { Icon, type IconName } from '../shared/Icon'
@@ -21,7 +22,7 @@ export interface ControlBarProps {
   onActivity: () => void
 }
 
-type MenuId = 'subs' | 'audio' | 'speed' | 'sleep' | null
+type MenuId = 'subs' | 'audio' | 'speed' | 'night' | 'sleep' | null
 
 const api = window.cassette
 
@@ -138,6 +139,13 @@ export function ControlBar({ state, shown, onMenuOpenChange, onActivity }: Contr
             onClick={() => toggle('speed')}
           />
           <Control
+            icon="night-light"
+            label="Night light"
+            active={menu === 'night' || state.nightLight.look !== null}
+            expanded={menu === 'night'}
+            onClick={() => toggle('night')}
+          />
+          <Control
             icon="sleep-timer"
             label="Sleep timer"
             active={
@@ -219,6 +227,10 @@ export function ControlBar({ state, shown, onMenuOpenChange, onActivity }: Contr
           />
         )}
 
+        {menu === 'night' && (
+          <NightLightMenu key="night" night={state.nightLight} onClose={() => setMenu(null)} />
+        )}
+
         {menu === 'sleep' && (
           <TrackMenu
             key="sleep"
@@ -274,7 +286,16 @@ export function ControlBar({ state, shown, onMenuOpenChange, onActivity }: Contr
                     </button>
                   ))}
                 </div>
-                <NightLightSwitch />
+                {/* The same setting as in the night light's own menu, here
+                    too because this is where the timer is set. */}
+                <div className="osd-menu-section">
+                  <OsdSwitch
+                    label="Night light"
+                    help="Warms, then dims over 10 min"
+                    checked={state.nightLight.withTimer}
+                    onChange={(on) => void api.updateSettings({ sleepNightLight: on })}
+                  />
+                </div>
               </>
             }
           />
@@ -361,47 +382,6 @@ function SubtitleSearch() {
           Try OpenSubtitles
         </button>
       )}
-    </div>
-  )
-}
-
-/**
- * The sleep timer's night light, switched from where the timer is set.
- *
- * It is a standing preference rather than part of one timer, so it is saved
- * as a setting and is there next time as well.
- */
-function NightLightSwitch() {
-  const [on, setOn] = useState<boolean | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    void api.getSettings().then((s) => {
-      if (!cancelled) setOn(s.sleepNightLight)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  if (on === null) return null
-  return (
-    <div className="osd-menu-section">
-      <button
-        className="osd-switch-row"
-        role="switch"
-        aria-checked={on}
-        onClick={() => {
-          setOn(!on)
-          void api.updateSettings({ sleepNightLight: !on })
-        }}
-      >
-        <span className="osd-switch-text">
-          <span className="osd-switch-label">Night light</span>
-          <span className="osd-switch-help">Warms, then dims over 10 min</span>
-        </span>
-        <span className="osd-switch" aria-hidden="true" />
-      </button>
     </div>
   )
 }

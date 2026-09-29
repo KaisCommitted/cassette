@@ -240,6 +240,10 @@ label.setting-row {
   gap: 14px;
   font-size: var(--text-sm);
 }
+/* The night light's one slider, kept to a comfortable length. */
+.night-light-intensity .slider-row {
+  max-width: 560px;
+}
 .slider-value {
   color: var(--muted);
   text-align: right;

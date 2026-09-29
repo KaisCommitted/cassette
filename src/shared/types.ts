@@ -112,8 +112,16 @@ export interface Settings {
   /** Even out loud and quiet passages — for watching at low volume. */
   nightAudio: boolean
   /**
-   * While a sleep timer runs, warm the picture and dim it over ten minutes.
-   * Cancelling the timer, or anything else that ends it early, undoes it.
+   * The night light, switched on by hand: warmer and darker until it is
+   * switched off again, across episodes and restarts.
+   */
+  nightLight: boolean
+  /** How warm and dark the night light goes, from 0 (gentle) to 1 (deep amber, very dim). */
+  nightLightIntensity: number
+  /**
+   * While a sleep timer runs, bring the night light in, darkening over ten
+   * minutes. Cancelling the timer, or anything else that ends it early,
+   * undoes it — unless the night light was already on by hand.
    */
   sleepNightLight: boolean
   /**
@@ -187,16 +195,33 @@ export interface PlaybackState {
   sleepRemainingSeconds: number | null
   /** Pause once the current episode ends rather than after a fixed time. */
   sleepAfterEpisode: boolean
-  /**
-   * How far the sleep timer's night light has got, each from 0 to 1, or null
-   * when the picture is untouched. The overlay draws the dimming; the warmth
-   * is applied inside mpv.
-   */
-  nightLight: { warmth: number; dim: number } | null
+  nightLight: NightLightState
   autoplayNext: boolean
   chapterCount: number
   /** True while mpv is loading a file, so the UI can show a spinner. */
   loading: boolean
+}
+
+/** The night light, as the player shows it and its menu offers it. */
+export interface NightLightState {
+  /** Switched on by hand; the saved setting. */
+  on: boolean
+  /** The intensity setting, 0 to 1. */
+  intensity: number
+  /** Comes on with the sleep timer; the saved setting. */
+  withTimer: boolean
+  /**
+   * What is being done to the picture right now, or null when it is
+   * untouched. The warmth is applied inside mpv; the overlay draws the
+   * darkening, and tints its own controls to match.
+   */
+  look: {
+    /** How much green and blue light is let through, 0 to 1; red is left alone. */
+    green: number
+    blue: number
+    /** How much of the picture a black layer covers, 0 to 1. */
+    dim: number
+  } | null
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -211,6 +236,8 @@ export const DEFAULT_SETTINGS: Settings = {
   autoEnableSubtitles: true,
   subtitleStyle: DEFAULT_SUBTITLE_STYLE,
   nightAudio: false,
+  nightLight: false,
+  nightLightIntensity: 0.5,
   sleepNightLight: false,
   minimumDurationMinutes: 15
 }
@@ -410,6 +437,7 @@ export const ACTIONS: ActionDefinition[] = [
   { id: 'cycleAudioTrack', label: 'Next audio track', group: 'Subtitles and audio' },
   { id: 'subtitleDelayDown', label: 'Subtitles 50 ms earlier', group: 'Subtitles and audio' },
   { id: 'subtitleDelayUp', label: 'Subtitles 50 ms later', group: 'Subtitles and audio' },
+  { id: 'toggleNightLight', label: 'Night light', group: 'Window' },
   { id: 'toggleFullscreen', label: 'Fullscreen', group: 'Window' },
   { id: 'hideAndPause', label: 'Pause and hide (works anywhere)', group: 'Window' }
 ]
@@ -420,9 +448,9 @@ export const ACTIONS: ActionDefinition[] = [
  *
  * Nothing is on the mouse by default except double click for fullscreen: a
  * single click or a scroll landing on the video is too easy to do by
- * accident. Episodes are moved between with the buttons, not N and P, and the
- * pause-and-hide key is left for you to choose, since whatever it is also
- * reaches every other app.
+ * accident. Episodes are moved between with the buttons, not N and P, which
+ * leaves N for the night light. The pause-and-hide key is left for you to
+ * choose, since whatever it is also reaches every other app.
  */
 export const DEFAULT_BINDINGS: KeyBindings = {
   'key:Space': 'playPause',
@@ -440,6 +468,7 @@ export const DEFAULT_BINDINGS: KeyBindings = {
   'key:h': 'subtitleDelayUp',
   'key:+': 'speedUp',
   'key:-': 'speedDown',
+  'key:n': 'toggleNightLight',
   'mouse:double': 'toggleFullscreen'
 }
 

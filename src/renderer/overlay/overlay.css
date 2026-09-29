@@ -579,18 +579,51 @@ p {
   transition: opacity 200ms var(--ease-in);
 }
 
-/* ---- sleep timer night light ---- */
+/* ---- night light ---- */
 
 /*
- * Updated once a second as the dimming ramps; the transition blends the
- * steps into one slow fade, and eases it away again when the timer ends.
+ * Updated twenty times a second while it fades and once a second while the
+ * sleep timer's darkening ramps; the short transition joins the steps up
+ * without lagging behind the warmth, which mpv applies at once.
  */
 .osd-night {
   position: absolute;
   inset: 0;
   background: #000;
   pointer-events: none;
-  transition: opacity 1.2s linear;
+  transition: opacity 120ms linear;
+}
+.osd-night-intensity {
+  display: grid;
+  gap: 4px;
+  padding: 10px 6px 4px 10px;
+}
+.osd-night-intensity-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.osd-night-intensity-value {
+  color: var(--brass);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.osd-range.osd-night-range {
+  width: 100%;
+}
+.osd-night-intensity-ends {
+  display: flex;
+  justify-content: space-between;
+  color: oklch(0.906 0.02 80 / 0.6);
+  font-size: var(--text-xs);
+}
+
+/* Holds the controls' tint (Overlay.tsx); takes no room of its own. */
+.osd-night-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
 }
 
 .osd-switch-row {

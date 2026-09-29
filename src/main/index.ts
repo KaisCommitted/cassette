@@ -6,7 +6,7 @@ import { BindingsStore } from './input/bindingsStore'
 import { GlobalHotkeyMachine } from './input/globalHotkey'
 import { startNativeHook } from './input/nativeHook'
 import { findNext, findPrevious } from './library/playQueue'
-import { NightLight } from './player/nightLight'
+import { NightLight, nightLightLook } from './player/nightLight'
 import { SleepTimer } from './player/sleepTimer'
 import { chooseSubtitlesOnLoad } from './player/subtitlesOnLoad'
 import { chooseAudioTrack } from './player/trackChoice'
@@ -148,6 +148,11 @@ registerCustomSchemes()
 // The stock Edit/View/Window menu is meaningless here and steals vertical space.
 Menu.setApplicationMenu(null)
 
+/** How often the night light is updated while it fades: about 20 steps a second. */
+const NIGHT_FRAME_MS = 50
+/** How soon a night light update mpv refused is tried again. */
+const NIGHT_RETRY_MS = 1000
+
 let ctx: AppContext | null = null
 let stopHook: (() => void) | null = null
 
@@ -212,7 +217,9 @@ async function bootstrap(): Promise<void> {
   // Handlers must be registered before the renderer mounts and starts calling
   // them. Starting mpv takes hundreds of milliseconds, so it must not come
   // first — the renderer's initial getLibrary() would arrive with no handler.
-  const nightLight = new NightLight()
+  // Left on at the last launch, the night light is simply on: nothing is
+  // playing yet, so there is nothing to fade in.
+  const nightLight = new NightLight(Date.now, { on: settings.get().nightLight })
   const sleepTimer = new SleepTimer({
     pause: () => {
       // Stay dim over whoever just fell asleep; see NightLight.
@@ -222,24 +229,49 @@ async function bootstrap(): Promise<void> {
     }
   })
 
+  /** A follow-up update while the night light fades, so it moves smoothly. */
+  let nightFrame: ReturnType<typeof setTimeout> | null = null
+  const publishAgainIn = (ms: number): void => {
+    if (nightFrame) return
+    nightFrame = setTimeout(() => {
+      nightFrame = null
+      publishSessionFlags()
+    }, ms)
+  }
+
   const publishSessionFlags = (): void => {
-    nightLight.sync(settings.get().sleepNightLight, sleepTimer.isSet)
-    const level = nightLight.level()
+    const config = settings.get()
+    nightLight.setManual(config.nightLight)
+    nightLight.sync(config.sleepNightLight, sleepTimer.isSet)
+    const { level, changing } = nightLight.snapshot()
+    const look = level ? nightLightLook(config.nightLightIntensity, level) : null
     mpv.setSessionFlags({
       sleepRemainingSeconds: sleepTimer.remainingSeconds(),
       sleepAfterEpisode: sleepTimer.stopsAfterEpisode,
-      nightLight: level,
-      autoplayNext: settings.get().autoplayNext
+      nightLight: {
+        on: config.nightLight,
+        intensity: config.nightLightIntensity,
+        withTimer: config.sleepNightLight,
+        look
+      },
+      autoplayNext: config.autoplayNext
     })
-    void mpv.setWarmth(level ? level.warmth : null).catch((error: Error) => {
+    void mpv.setNightLight(look).catch((error: Error) => {
       console.error('[cassette] night light failed:', error.message)
+      // Nothing else may come along to try again once it has settled.
+      publishAgainIn(NIGHT_RETRY_MS)
     })
+    // The once-a-second tick below is plenty for the timer's ten-minute
+    // darkening, but a fade of a second or two needs many more steps. And a
+    // last frame of a fade that has ended since is followed by one more, so
+    // it is never left almost-but-not-quite off.
+    if (changing || (look !== null && !nightLight.isOn)) publishAgainIn(NIGHT_FRAME_MS)
   }
 
   /** Cancels the sleep timer and anything it was doing to the picture. */
   const endSleep = (): void => {
     sleepTimer.clear()
-    nightLight.stop()
+    nightLight.endTimer()
     publishSessionFlags()
   }
 
@@ -274,6 +306,8 @@ async function bootstrap(): Promise<void> {
 
 
   await mpv.start(videoWindow.getNativeWindowHandle(), legacyCompositing)
+  // A night light left on is in place before anything plays.
+  publishSessionFlags()
 
   // mpv dying mid-episode used to leave a dead player on screen, every
   // control waiting five seconds on a reply that would never come. Close the
@@ -285,6 +319,7 @@ async function bootstrap(): Promise<void> {
       if (ctx && mpv.getState().path) await stopPlayback(ctx)
       if (!videoWindow.isDestroyed()) {
         await mpv.start(videoWindow.getNativeWindowHandle(), legacyCompositing)
+        publishSessionFlags()
       }
     })().catch((error: Error) => {
       console.error('[cassette] could not restart mpv:', error.message)
@@ -374,6 +409,11 @@ async function bootstrap(): Promise<void> {
         return
       case 'toggleFullscreen':
         if (ctx) await toggleFullscreen(ctx)
+        return
+      case 'toggleNightLight':
+        // Saved like any setting, so it is still on tomorrow.
+        await settings.patch({ nightLight: !settings.get().nightLight })
+        publishSessionFlags()
         return
       case 'hideAndPause':
         await hotkey.trigger()
@@ -582,9 +622,11 @@ async function bootstrap(): Promise<void> {
     if (nightLight.notePaused(state.paused)) publishSessionFlags()
   })
 
-  // Keep the countdown on screen ticking, and the night light ramping.
+  // Keep the countdown on screen ticking, and the timer's night light
+  // ramping. A night light switched on by hand is steady, and its fades
+  // bring their own updates, so it needs none of this.
   const sleepTick = setInterval(() => {
-    if (sleepTimer.isSet || nightLight.isOn) publishSessionFlags()
+    if (sleepTimer.isSet || nightLight.snapshot().followsTimer) publishSessionFlags()
   }, 1000)
   sleepTick.unref?.()
 

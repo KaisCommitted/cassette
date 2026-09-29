@@ -44,7 +44,7 @@ export interface AppContext {
   sleepTimer: SleepTimer
   /** Pushes timer and autoplay state into the overlay. */
   publishSessionFlags: () => void
-  /** Cancels the sleep timer, and the night light with it. */
+  /** Cancels the sleep timer, and the night light it brought in. */
   endSleep: () => void
   onSettingsChanged?: (settings: Settings) => void
   /** Key of the file currently loaded, so progress ticks know where to go. */

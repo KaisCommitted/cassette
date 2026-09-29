@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { VOLUME_MAX, type PlaybackState, type VolumeStep } from '@shared/types'
+import { VOLUME_MAX, type NightLightState, type PlaybackState, type VolumeStep } from '@shared/types'
 import { ControlBar } from './ControlBar'
 import { describeMouse, formatTime } from './format'
 import { useNowPlaying } from './useNowPlaying'
@@ -9,8 +9,12 @@ import { EASE_IN_OUT, EASE_OUT } from '../shared/motion'
 
 /** Controls fade out after this long without pointer movement. */
 const IDLE_HIDE_MS = 2600
-/** How dark the night light gets at its deepest: 0.6 leaves 40% of the light. */
-const NIGHT_DIM_MAX = 0.6
+/**
+ * How much of the night light's darkening the controls take. They sit above
+ * the black layer, so they would otherwise be the brightest thing in a dark
+ * room; this keeps them readable without glaring.
+ */
+const NIGHT_CONTROLS_DIM = 0.5
 /** How long the subtitle delay stays on screen after the last change. */
 const DELAY_TOAST_MS = 1600
 /** How long the landing spot stays on screen after Back/Forward 10s or 1min. */
@@ -96,10 +100,15 @@ export function Overlay() {
   // Mouse input over the video resolves through the same binding table as the
   // keyboard, so anything bindable to a key is bindable to a button.
   const send = (descriptor: string): void => window.cassette.runInput(descriptor)
+  const night = state.nightLight.look
 
   return (
     <div
       className={shown ? 'osd is-shown' : 'osd'}
+      // The controls, toasts and loading screen take the night light's
+      // colour too, so at its strongest nothing over the video gives off
+      // blue. Off, there is no filter at all, so nothing is paid for it.
+      style={night ? { filter: 'url(#osd-night-tint)' } : undefined}
       onMouseDown={(e) => {
         if (e.currentTarget !== e.target) return
         send(describeMouse(e.nativeEvent))
@@ -123,14 +132,12 @@ export function Overlay() {
       }}
       onContextMenu={(e) => e.preventDefault()}
     >
-      {/* The sleep timer's night light: the darkening half. It covers the
-          subtitles too, which mpv draws after the warming shader. The
-          controls sit above it, so they stay readable when woken. */}
-      <div
-        className="osd-night"
-        style={{ opacity: state.nightLight ? state.nightLight.dim * NIGHT_DIM_MAX : 0 }}
-        aria-hidden="true"
-      />
+      <NightTint look={state.nightLight.look} />
+
+      {/* The night light: the darkening half. It covers the subtitles as
+          well as the picture. The controls sit above it, so they stay
+          readable when woken. */}
+      <div className="osd-night" style={{ opacity: night?.dim ?? 0 }} aria-hidden="true" />
 
       {/* Under the loading screen and the controls, so both show over it. */}
       <div className={arriving ? 'osd-dip is-on' : 'osd-dip'} aria-hidden="true" />
@@ -205,6 +212,31 @@ export function Overlay() {
       {/* Covers the jump between window sizes; see toggleFullscreen in main. */}
       <div className={dipped ? 'osd-dip is-on' : 'osd-dip'} aria-hidden="true" />
     </div>
+  )
+}
+
+/**
+ * The night light's colour, for the overlay's own controls: the same cut to
+ * green and blue that mpv's shader applies to the picture, and part of its
+ * darkening.
+ *
+ * Worked out on the colour values as they are, like the shader, rather than
+ * on light (the SVG default), so the two match.
+ */
+function NightTint({ look }: { look: NightLightState['look'] }) {
+  const k = 1 - NIGHT_CONTROLS_DIM * (look?.dim ?? 0)
+  const r = k
+  const g = k * (look?.green ?? 1)
+  const b = k * (look?.blue ?? 1)
+  return (
+    <svg className="osd-night-defs" aria-hidden="true">
+      <filter id="osd-night-tint" colorInterpolationFilters="sRGB">
+        <feColorMatrix
+          type="matrix"
+          values={`${r} 0 0 0 0  0 ${g} 0 0 0  0 0 ${b} 0 0  0 0 0 1 0`}
+        />
+      </filter>
+    </svg>
   )
 }
 

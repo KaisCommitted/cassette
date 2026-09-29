@@ -1,5 +1,6 @@
 import { DEFAULT_SETTINGS, DEFAULT_SUBTITLE_STYLE, type Settings } from '@shared/types'
 import { readJson, writeJsonAtomic } from './atomicJson'
+import { intensityForDim, LEGACY_TIMER_DIM } from '../player/nightLight'
 
 export class SettingsStore {
   private settings: Settings = { ...DEFAULT_SETTINGS }
@@ -14,6 +15,12 @@ export class SettingsStore {
       ...DEFAULT_SETTINGS,
       ...(saved ?? {}),
       subtitleStyle: { ...DEFAULT_SUBTITLE_STYLE, ...(saved?.subtitleStyle ?? {}) }
+    }
+    // The night light had no intensity while it only came with the sleep
+    // timer. Someone who used it that way starts at the intensity that
+    // darkens as far as it always did, rather than noticeably less.
+    if (saved && saved.nightLightIntensity === undefined && saved.sleepNightLight === true) {
+      this.settings.nightLightIntensity = intensityForDim(LEGACY_TIMER_DIM)
     }
   }
 
