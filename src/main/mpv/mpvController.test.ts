@@ -79,7 +79,7 @@ describe('MpvController when mpv goes away', () => {
 })
 
 /** Simulates mpv reporting a property, the way `time-pos` and `duration` do. */
-function reportProperty(sock: Duplex, name: string, data: number): Promise<void> {
+function reportProperty(sock: Duplex, name: string, data: number | boolean): Promise<void> {
   sock.push(`${JSON.stringify({ event: 'property-change', name, data })}\n`)
   return new Promise((r) => setImmediate(r))
 }
@@ -115,5 +115,104 @@ describe('MpvController.seekRelative', () => {
     mpv.on('seekJump', landed)
     await mpv.seekRelative(-60)
     expect(landed).toHaveBeenCalledWith(0)
+  })
+})
+
+describe('MpvController.stepVolume', () => {
+  it('emits the level it lands on, for a toast to show', async () => {
+    const { mpv, sock } = await playing()
+    await reportProperty(sock, 'volume', 50)
+
+    const stepped = vi.fn()
+    mpv.on('volumeStep', stepped)
+    await mpv.stepVolume(5)
+    expect(stepped).toHaveBeenCalledWith({ volume: 55, muted: false })
+  })
+
+  it('stops at the loudest mpv allows, and at silence', async () => {
+    const { mpv, sock } = await playing()
+    const stepped = vi.fn()
+    mpv.on('volumeStep', stepped)
+
+    await reportProperty(sock, 'volume', 128)
+    await mpv.stepVolume(5)
+    expect(stepped).toHaveBeenLastCalledWith({ volume: 130, muted: false })
+
+    await reportProperty(sock, 'volume', 3)
+    await mpv.stepVolume(-5)
+    expect(stepped).toHaveBeenLastCalledWith({ volume: 0, muted: false })
+  })
+
+  it('keeps climbing while a held key outruns mpv reporting back', async () => {
+    const { mpv, sock } = await playing()
+    await reportProperty(sock, 'volume', 50)
+
+    const stepped = vi.fn()
+    mpv.on('volumeStep', stepped)
+    // Three presses before mpv says anything about the first.
+    await Promise.all([mpv.stepVolume(5), mpv.stepVolume(5), mpv.stepVolume(5)])
+    expect(stepped.mock.calls.map(([step]) => step.volume)).toEqual([55, 60, 65])
+  })
+
+  it('says it is still muted when stepped while muted', async () => {
+    const { mpv, sock } = await playing()
+    await reportProperty(sock, 'volume', 40)
+    await reportProperty(sock, 'mute', true)
+
+    const stepped = vi.fn()
+    mpv.on('volumeStep', stepped)
+    await mpv.stepVolume(-5)
+    expect(stepped).toHaveBeenCalledWith({ volume: 35, muted: true })
+  })
+})
+
+describe('MpvController.toggleMute', () => {
+  it('announces the new state from the mute key', async () => {
+    const { mpv, sock } = await playing()
+    await reportProperty(sock, 'volume', 70)
+
+    const stepped = vi.fn()
+    mpv.on('volumeStep', stepped)
+    await mpv.toggleMute({ announce: true })
+    expect(stepped).toHaveBeenCalledWith({ volume: 70, muted: true })
+  })
+
+  it('stays quiet from the button, which shows its own state', async () => {
+    const { mpv } = await playing()
+    const stepped = vi.fn()
+    mpv.on('volumeStep', stepped)
+    await mpv.toggleMute()
+    expect(stepped).not.toHaveBeenCalled()
+  })
+
+  it('flips from what was last asked, not from a report still on its way', async () => {
+    const { mpv } = await playing()
+    const stepped = vi.fn()
+    mpv.on('volumeStep', stepped)
+    await Promise.all([mpv.toggleMute({ announce: true }), mpv.toggleMute({ announce: true })])
+    expect(stepped.mock.calls.map(([step]) => step.muted)).toEqual([true, false])
+  })
+
+  it('flips again after mpv has answered but before it reports the change', async () => {
+    const { mpv } = await playing()
+    const stepped = vi.fn()
+    mpv.on('volumeStep', stepped)
+    // The stand-in answers every command and never reports a property,
+    // which is the gap between mpv's reply and its report, held open.
+    await mpv.toggleMute({ announce: true })
+    await mpv.toggleMute({ announce: true })
+    expect(stepped.mock.calls.map(([step]) => step.muted)).toEqual([true, false])
+  })
+})
+
+describe('MpvController.stepVolume after mpv has answered', () => {
+  it('builds on the level it asked for while the report is still on its way', async () => {
+    const { mpv, sock } = await playing()
+    await reportProperty(sock, 'volume', 50)
+    const stepped = vi.fn()
+    mpv.on('volumeStep', stepped)
+    await mpv.stepVolume(5)
+    await mpv.stepVolume(5)
+    expect(stepped.mock.calls.map(([step]) => step.volume)).toEqual([55, 60])
   })
 })

@@ -700,6 +700,97 @@ p {
   text-align: right;
 }
 
+/* ---- volume, shown as it changes ---- */
+
+/*
+ * A fader standing at the right-hand edge, the way VLC shows it, in the
+ * same dark glass and brass as the toasts. Fixed in width, so going from a
+ * number to "Muted" does not shift the bar sideways.
+ */
+.osd-volume-toast {
+  position: absolute;
+  right: 32px;
+  top: 50%;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: 104px;
+  padding: 16px 0 18px;
+  border: 1px solid oklch(0.906 0.02 80 / 0.14);
+  border-radius: var(--r-lg);
+  background: oklch(0.17 0.004 85 / 0.85);
+  box-shadow: 0 8px 28px oklch(0 0 0 / 0.45);
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(8px, -50%);
+  transition:
+    opacity var(--t-settle) ease,
+    transform var(--t-settle) var(--ease-out);
+}
+.osd-volume-toast.is-on {
+  opacity: 1;
+  transform: translate(0, -50%);
+  transition-duration: var(--t-quick);
+}
+.osd-volume-value {
+  /* One height for the number and for "Muted", so the panel keeps still. */
+  display: grid;
+  height: 26px;
+  align-items: center;
+  color: var(--brass);
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+.osd-volume-value.is-muted {
+  color: oklch(0.906 0.02 80 / 0.55);
+  font-size: var(--text-xl);
+}
+.osd-fader {
+  position: relative;
+  width: 10px;
+  /* Tall enough to read as a fader, short enough for a small window. */
+  height: clamp(120px, 30vh, 240px);
+  border-radius: 99px;
+  background: oklch(0.906 0.02 80 / 0.18);
+}
+.osd-fader-fill {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: var(--fill);
+  border-radius: inherit;
+  background: var(--brass);
+  /* A held key steps every few tens of milliseconds; easing between steps
+     makes that a glide rather than a stutter. */
+  transition:
+    height var(--t-quick) var(--ease-out),
+    background-color var(--t-quick) ease;
+}
+.osd-fader.is-muted .osd-fader-fill {
+  background: oklch(0.906 0.02 80 / 0.32);
+}
+/* Where 100 falls: above it, mpv is amplifying. */
+.osd-fader-mark {
+  position: absolute;
+  bottom: var(--hundred);
+  left: -6px;
+  right: -6px;
+  height: 2px;
+  margin-bottom: -1px;
+  border-radius: 1px;
+  background: oklch(0.906 0.02 80 / 0.6);
+}
+.osd-volume-icon {
+  width: 28px;
+  height: 28px;
+  color: var(--cream);
+}
+
 /* ---- opening a file ---- */
 
 .osd-loading {

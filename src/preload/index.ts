@@ -9,7 +9,8 @@ import {
   type MetadataSnapshot,
   type PlaybackState,
   type ProgressRecord,
-  type Settings
+  type Settings,
+  type VolumeStep
 } from '@shared/types'
 
 const invoke = <T,>(channel: string, ...args: unknown[]): Promise<T> =>
@@ -86,6 +87,7 @@ const api: CassetteApi = {
   },
   onScreenTransition: (cb) => subscribe<'out' | 'in'>(IPC.screenTransition, cb),
   onSeekJump: (cb) => subscribe<number>(IPC.seekJump, cb),
+  onVolumeStep: (cb) => subscribe<VolumeStep>(IPC.volumeStep, cb),
   onMetadataProgress: (cb) => subscribe<MetadataProgressInfo>(IPC.metadataProgress, cb),
 
   onPlaybackState: (cb) => {

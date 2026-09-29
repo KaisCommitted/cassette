@@ -1,6 +1,6 @@
 import { app, ipcMain, Menu } from 'electron'
 import { join } from 'node:path'
-import { IPC, type Library, type PlaybackState } from '@shared/types'
+import { IPC, type Library, type PlaybackState, type VolumeStep } from '@shared/types'
 import { describeKey } from './input/descriptors'
 import { BindingsStore } from './input/bindingsStore'
 import { GlobalHotkeyMachine } from './input/globalHotkey'
@@ -347,11 +347,11 @@ async function bootstrap(): Promise<void> {
       case 'speedDown':
         return mpv.setSpeed(state.speed - 0.25)
       case 'volumeUp':
-        return mpv.setVolume(state.volume + 5)
+        return mpv.stepVolume(5)
       case 'volumeDown':
-        return mpv.setVolume(state.volume - 5)
+        return mpv.stepVolume(-5)
       case 'mute':
-        return mpv.toggleMute()
+        return mpv.toggleMute({ announce: true })
       case 'cycleSubtitleTrack':
         return mpv.cycleSubtitleTrack()
       case 'cycleAudioTrack':
@@ -478,6 +478,14 @@ async function bootstrap(): Promise<void> {
   mpv.on('seekJump', (positionSeconds: number) => {
     if (ctx && !ctx.overlayWindow.isDestroyed()) {
       ctx.overlayWindow.webContents.send(IPC.seekJump, positionSeconds)
+    }
+  })
+
+  // The volume and mute keys are pressed with the controls hidden just as
+  // often, and the slider that would show the level is hidden with them.
+  mpv.on('volumeStep', (step: VolumeStep) => {
+    if (ctx && !ctx.overlayWindow.isDestroyed()) {
+      ctx.overlayWindow.webContents.send(IPC.volumeStep, step)
     }
   })
 

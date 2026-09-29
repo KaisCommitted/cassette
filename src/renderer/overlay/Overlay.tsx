@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import type { PlaybackState } from '@shared/types'
+import { VOLUME_MAX, type PlaybackState, type VolumeStep } from '@shared/types'
 import { ControlBar } from './ControlBar'
 import { describeMouse, formatTime } from './format'
 import { useNowPlaying } from './useNowPlaying'
@@ -16,6 +16,13 @@ const DELAY_TOAST_MS = 1600
 /** How long the landing spot stays on screen after Back/Forward 10s or 1min. */
 const SEEK_TOAST_MS = 1600
 /**
+ * How long the volume stays on screen after the last press. Shorter than the
+ * others: it is a level, read in a glance, and a held key keeps it up anyway.
+ */
+const VOLUME_TOAST_MS = 1300
+/** Wheel travel in pixels that makes one step: one notch of a mouse wheel. */
+const WHEEL_NOTCH = 100
+/**
  * How long after a file reports itself open before its picture is brought
  * up: long enough for the resumed frame to be drawn, so what fades up is the
  * scene and not a flash of the first frame.
@@ -29,6 +36,8 @@ export function Overlay() {
   /** True while the window changes between fullscreen and not. */
   const [dipped, setDipped] = useState(false)
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** Wheel travel not yet worth a step; see onWheel. */
+  const wheelTravel = useRef(0)
 
   useEffect(() => window.cassette.onPlaybackState(setState), [])
   useEffect(() => window.cassette.onScreenTransition((phase) => setDipped(phase === 'out')), [])
@@ -58,6 +67,7 @@ export function Overlay() {
   const nowPlaying = useNowPlaying(state?.path ?? null, state?.label ?? '')
   const delayToast = useDelayToast(state?.subtitleDelayMs ?? null, state?.path ?? null)
   const seekToast = useSeekToast()
+  const volumeToast = useVolumeToast()
 
   const wake = useCallback(() => {
     setVisible(true)
@@ -100,7 +110,16 @@ export function Overlay() {
       }}
       onWheel={(e) => {
         if (e.currentTarget !== e.target) return
-        send(e.deltaY < 0 ? 'mouse:wheelUp' : 'mouse:wheelDown')
+        // One step per notch of a wheel, however many events it arrives
+        // in. A touchpad or free-spinning wheel fires dozens of small ones
+        // per flick, and a step for each would throw the volume to its
+        // maximum from one gesture.
+        const travel = e.deltaMode === 0 ? e.deltaY : Math.sign(e.deltaY) * WHEEL_NOTCH
+        if (Math.sign(travel) !== Math.sign(wheelTravel.current)) wheelTravel.current = 0
+        wheelTravel.current += travel
+        if (Math.abs(wheelTravel.current) < WHEEL_NOTCH) return
+        wheelTravel.current = 0
+        send(travel < 0 ? 'mouse:wheelUp' : 'mouse:wheelDown')
       }}
       onContextMenu={(e) => e.preventDefault()}
     >
@@ -140,6 +159,18 @@ export function Overlay() {
       >
         <span className="osd-toast-label">Skipped</span>
         <span className="osd-toast-value">{formatTime(seekToast.positionSeconds)}</span>
+      </div>
+
+      {/* Volume and mute keys, and the wheel: the level, standing up the
+          right-hand side like a fader. The slider that would show it hides
+          with the bar, and it is off to the side of the two toasts above, so
+          it never covers them. */}
+      <div
+        className={volumeToast.visible ? 'osd-volume-toast is-on' : 'osd-volume-toast'}
+        role="status"
+        aria-live="polite"
+      >
+        <VolumeLevel step={volumeToast.step} />
       </div>
 
       {/* Only the button takes the pointer: the band itself lets presses
@@ -246,6 +277,68 @@ function useSeekToast(): { visible: boolean; positionSeconds: number } {
     []
   )
   return toast
+}
+
+/**
+ * Shows the sound level for a moment after a volume or mute key.
+ *
+ * Each press restarts the timer rather than the toast, so a held key keeps it
+ * up and the level simply moves. As with the seek toast, only a key press
+ * sends this (mpvController.stepVolume and toggleMute); the slider, which
+ * shows the level itself, does not.
+ */
+function useVolumeToast(): { visible: boolean; step: VolumeStep } {
+  const [toast, setToast] = useState({ visible: false, step: { volume: 0, muted: false } })
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(
+    () =>
+      window.cassette.onVolumeStep((step) => {
+        setToast({ visible: true, step })
+        if (timer.current) clearTimeout(timer.current)
+        timer.current = setTimeout(() => setToast((t) => ({ ...t, visible: false })), VOLUME_TOAST_MS)
+      }),
+    []
+  )
+
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current)
+    },
+    []
+  )
+  return toast
+}
+
+/**
+ * The level as a fader: the number on top, the bar filling upward, and the
+ * speaker underneath. The bar runs to the loudest the player goes, past 100,
+ * with a notch where 100 falls so the amplified part reads as such. Muted,
+ * the bar greys out but keeps its height: that is what unmuting goes back to.
+ */
+function VolumeLevel({ step }: { step: VolumeStep }) {
+  const silent = step.muted || step.volume === 0
+  return (
+    <>
+      <span className={step.muted ? 'osd-volume-value is-muted' : 'osd-volume-value'}>
+        {step.muted ? 'Muted' : `${Math.round(step.volume)}%`}
+      </span>
+      <span
+        className={step.muted ? 'osd-fader is-muted' : 'osd-fader'}
+        style={
+          {
+            '--fill': `${(step.volume / VOLUME_MAX) * 100}%`,
+            '--hundred': `${(100 / VOLUME_MAX) * 100}%`
+          } as CSSProperties
+        }
+        aria-hidden="true"
+      >
+        <span className="osd-fader-fill" />
+        <span className="osd-fader-mark" />
+      </span>
+      <Icon name={silent ? 'mute' : 'volume'} className="osd-volume-icon" />
+    </>
+  )
 }
 
 /**

@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { app } from 'electron'
-import type { PlaybackState, SubtitleStyle, TrackInfo } from '@shared/types'
+import { VOLUME_MAX, type PlaybackState, type SubtitleStyle, type TrackInfo } from '@shared/types'
 import { MpvIpc } from './mpvIpc'
 import { startMpv, type MpvProcess } from './mpvProcess'
 
@@ -29,6 +29,10 @@ interface RawTrack {
   codec?: string
   selected?: boolean
   'external-filename'?: string
+}
+
+function clampVolume(volume: number): number {
+  return Math.max(0, Math.min(VOLUME_MAX, volume))
 }
 
 function emptyState(): PlaybackState {
@@ -306,13 +310,63 @@ export class MpvController extends EventEmitter {
     await this.send(['seek', clamped, 'absolute'])
   }
 
+  /** Sets the volume outright: the slider in the control bar. */
   async setVolume(volume: number): Promise<void> {
-    const clamped = Math.max(0, Math.min(130, volume))
-    await this.send(['set_property', 'volume', clamped])
+    await this.send(['set_property', 'volume', clampVolume(volume)])
   }
 
-  async toggleMute(): Promise<void> {
-    await this.send(['cycle', 'mute'])
+  /**
+   * What the volume and mute keys have asked mpv for that it has not yet
+   * done. Commands wait their turn behind each other (see send), so with a
+   * key held down mpv's own report lags a few presses behind; each press
+   * builds on the last one asked for rather than on that report, or the
+   * volume would keep landing on the same step.
+   */
+  private asked: { volume: number | null; muted: boolean | null } = { volume: null, muted: null }
+
+  /**
+   * Steps the volume up or down by a fixed amount — a key or the wheel — as
+   * opposed to the slider, which shows where it is by itself.
+   *
+   * Emits `volumeStep` with the level this lands on and whether sound is
+   * muted, for the overlay to show as a toast. As with seekRelative, it is
+   * the level computed here rather than mpv's report, so the toast answers
+   * the key press at once and keeps up while the key is held.
+   */
+  async stepVolume(delta: number): Promise<void> {
+    const volume = clampVolume((this.asked.volume ?? this.state.volume) + delta)
+    this.asked.volume = volume
+    this.emit('volumeStep', { volume, muted: this.asked.muted ?? this.state.muted })
+    try {
+      await this.send(['set_property', 'volume', volume])
+      // mpv has taken it, but its report of the new level can still be on
+      // the way. Kept here too, a press landing in between builds on this
+      // level rather than the old one and does not repeat a step.
+      if (this.asked.volume === volume) this.state.volume = volume
+    } finally {
+      if (this.asked.volume === volume) this.asked.volume = null
+    }
+  }
+
+  /**
+   * Mutes or unmutes. `announce` is for the mute key, which emits
+   * `volumeStep` the way stepVolume does; the button in the control bar
+   * shows its own state and leaves it off.
+   */
+  async toggleMute(options: { announce?: boolean } = {}): Promise<void> {
+    const muted = !(this.asked.muted ?? this.state.muted)
+    this.asked.muted = muted
+    if (options.announce) {
+      this.emit('volumeStep', { volume: this.asked.volume ?? this.state.volume, muted })
+    }
+    try {
+      await this.send(['set_property', 'mute', muted])
+      // As with the volume: a second press before mpv reports the change
+      // must toggle from this, not from the state it is leaving.
+      if (this.asked.muted === muted) this.state.muted = muted
+    } finally {
+      if (this.asked.muted === muted) this.asked.muted = null
+    }
   }
 
   async setSpeed(speed: number): Promise<void> {
