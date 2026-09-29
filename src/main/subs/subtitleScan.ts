@@ -1,9 +1,11 @@
 import type { Library, MediaFile, Settings, SubtitleSearchOptions } from '@shared/types'
 import { MediaProbe } from '../library/mediaProbe'
-import { findLocalSubtitles, languageName, normaliseLanguage } from './localSubtitles'
+import { dirname } from 'node:path'
+import { FolderCache, findLocalSubtitles } from './localSubtitles'
+import { languageName, normaliseLanguage } from './language'
 import { describeEmbedded, probeEmbeddedSubtitles } from './embeddedSubtitles'
 import { OpenSubtitlesClient } from './openSubtitles'
-import { rankSubdl, SubdlClient } from './subdl'
+import { clearArchiveCache, rankSubdl, SubdlClient } from './subdl'
 
 export type ScanScope =
   | { kind: 'episode'; key: string }
@@ -96,10 +98,15 @@ export async function scanForSubtitles(
   await probe.load()
 
   const results: ScanResultItem[] = []
+  const folders = new FolderCache()
 
-  for (const [index, target] of targets.entries()) {
-    onProgress?.({ done: index, total: targets.length, current: target.label })
-    results.push(await scanOne(target.file, target.label, settings, probe, options))
+  try {
+    for (const [index, target] of targets.entries()) {
+      onProgress?.({ done: index, total: targets.length, current: target.label })
+      results.push(await scanOne(target.file, target.label, settings, probe, options, folders))
+    }
+  } finally {
+    clearArchiveCache()
   }
 
   // Anything probed here is worth keeping: the next scan, and the next library
@@ -115,7 +122,8 @@ export async function scanOne(
   label: string,
   settings: Settings,
   probe: MediaProbe | null = null,
-  options: SubtitleSearchOptions = {}
+  options: SubtitleSearchOptions = {},
+  folders: FolderCache | null = null
 ): Promise<ScanResultItem> {
   const wanted = wantedLanguages(settings)
   const provider = options.provider ?? 'subdl'
@@ -138,7 +146,7 @@ export async function scanOne(
     }
   }
 
-  const local = await findLocalSubtitles(file.path)
+  const local = await findLocalSubtitles(file, folders)
   for (const sub of local) {
     if (sub.lang) covered.add(normaliseLanguage(sub.lang))
   }
@@ -196,6 +204,9 @@ export async function scanOne(
       provider === 'subdl'
         ? await downloadFromSubdl(file, missing, key)
         : await downloadFromOpenSubtitles(file, missing, key)
+    // What was just written sits in that folder now, and the next episode's
+    // look at it has to see it.
+    for (const path of written) folders?.added(path)
     if (written.length === 0) {
       return {
         key: file.key,
@@ -212,6 +223,8 @@ export async function scanOne(
       detail: written.join(', ')
     }
   } catch (error) {
+    // One language may have been written before another failed.
+    folders?.invalidate(dirname(file.path))
     return {
       key: file.key,
       label,
@@ -234,14 +247,33 @@ async function downloadFromSubdl(file: MediaFile, missing: string[], key: string
   const client = new SubdlClient(key)
   // One search covers every language, so a file costs a single request no
   // matter how many languages are being filled in.
-  const candidates = rankSubdl(await client.search(file, missing), file.path)
+  const candidates = rankSubdl(await client.search(file, missing), file)
+  let failure: unknown = null
   for (const language of missing) {
-    const best = candidates.find((c) => c.language === language)
-    if (!best) continue
-    written.push(await client.download(best, file.path))
+    // A pack with no entry for this episode, or an upload whose archive turns
+    // out to hold another one, is passed over for the next best rather than
+    // written down as this episode's.
+    const tries = candidates
+      .filter((c) => c.language === language)
+      .slice(0, ARCHIVES_TRIED_PER_LANGUAGE)
+    for (const candidate of tries) {
+      try {
+        const path = await client.download(candidate, file)
+        if (path) {
+          written.push(path)
+          break
+        }
+      } catch (error) {
+        failure = error
+      }
+    }
   }
+  if (written.length === 0 && failure) throw failure
   return written
 }
+
+/** Enough to get past a few mislabelled uploads without hammering SubDL. */
+const ARCHIVES_TRIED_PER_LANGUAGE = 5
 
 /** The same from OpenSubtitles, only ever run when someone asks for it. */
 async function downloadFromOpenSubtitles(
@@ -251,7 +283,7 @@ async function downloadFromOpenSubtitles(
 ): Promise<string[]> {
   const written: string[] = []
   const client = new OpenSubtitlesClient({ apiKey: key })
-  const candidates = await client.search(file, file.path, missing)
+  const candidates = await client.search(file, missing)
   for (const language of missing) {
     const best = candidates.find((c) => normaliseLanguage(c.language) === language)
     if (!best) continue

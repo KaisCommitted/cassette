@@ -1,7 +1,10 @@
 import { createHash } from 'node:crypto'
 import { open, writeFile } from 'node:fs/promises'
-import { dirname, extname, join, basename } from 'node:path'
-import type { ParsedMedia } from '@shared/types'
+import { dirname, extname, basename } from 'node:path'
+import type { MediaFile, ParsedMedia } from '@shared/types'
+import { normaliseLanguage } from './language'
+import { freeName, releaseHint, toSubdlLanguage } from './subdl'
+import { identifySubtitle, identifyVideo, scoreMatch } from './subtitleMatch'
 
 const API = 'https://api.opensubtitles.com/api/v1'
 
@@ -10,8 +13,17 @@ export interface SubtitleCandidate {
   fileId: number
   language: string
   release: string
+  /** The subtitle file's own name, when the upload gives one. */
+  fileName: string
   downloads: number
   fromTrusted: boolean
+  /** Found by the video's hash: made for this very release. */
+  hashMatch: boolean
+  hearingImpaired: boolean
+  /** Only the foreign-language lines, not a full subtitle. */
+  forced: boolean
+  season: number | null
+  episode: number | null
 }
 
 export interface OpenSubtitlesConfig {
@@ -38,23 +50,26 @@ export class OpenSubtitlesClient {
     }
   }
 
-  async search(
-    parsed: ParsedMedia,
-    videoPath: string,
-    languages: string[]
-  ): Promise<SubtitleCandidate[]> {
+  /**
+   * Subtitles for a file, best first, with anything for another episode,
+   * another film or only the foreign-language lines already left out
+   * (rankOpenSubtitles).
+   */
+  async search(file: MediaFile, languages: string[]): Promise<SubtitleCandidate[]> {
     const params = new URLSearchParams()
-    params.set('query', parsed.title)
-    if (parsed.year) params.set('year', String(parsed.year))
-    if (parsed.season !== null) params.set('season_number', String(parsed.season))
-    if (parsed.episodes[0] !== undefined) {
-      params.set('episode_number', String(parsed.episodes[0]))
+    params.set('query', file.title)
+    params.set('type', file.kind === 'series' ? 'episode' : 'movie')
+    if (file.year) params.set('year', String(file.year))
+    if (file.season !== null) params.set('season_number', String(file.season))
+    if (file.episodes[0] !== undefined) {
+      params.set('episode_number', String(file.episodes[0]))
     }
-    params.set('languages', languages.join(','))
+    // OpenSubtitles takes two-letter codes; `eng` found nothing at all.
+    params.set('languages', languages.map((l) => toSubdlLanguage(l).toLowerCase()).join(','))
 
     // The file hash lets OpenSubtitles return subtitles already known to be in
     // sync with this exact release, which beats matching on title alone.
-    const hash = await moviehash(videoPath).catch(() => null)
+    const hash = await moviehash(file.path).catch(() => null)
     if (hash) params.set('moviehash', hash)
 
     const response = await fetch(`${API}/subtitles?${params.toString()}`, {
@@ -72,22 +87,35 @@ export class OpenSubtitlesClient {
           release?: string
           download_count?: number
           from_trusted?: boolean
-          files?: Array<{ file_id?: number }>
+          moviehash_match?: boolean
+          hearing_impaired?: boolean
+          foreign_parts_only?: boolean
+          feature_details?: { season_number?: number | null; episode_number?: number | null }
+          files?: Array<{ file_id?: number; file_name?: string }>
         }
       }>
     }
 
-    return (body.data ?? [])
-      .map((item) => ({
-        id: item.id,
-        fileId: item.attributes?.files?.[0]?.file_id ?? 0,
-        language: item.attributes?.language ?? 'unknown',
-        release: item.attributes?.release ?? '',
-        downloads: item.attributes?.download_count ?? 0,
-        fromTrusted: item.attributes?.from_trusted === true
-      }))
+    const candidates = (body.data ?? [])
+      .map((item) => {
+        const a = item.attributes
+        return {
+          id: item.id,
+          fileId: a?.files?.[0]?.file_id ?? 0,
+          language: a?.language ?? 'unknown',
+          release: a?.release ?? '',
+          fileName: a?.files?.[0]?.file_name ?? '',
+          downloads: a?.download_count ?? 0,
+          fromTrusted: a?.from_trusted === true,
+          hashMatch: a?.moviehash_match === true,
+          hearingImpaired: a?.hearing_impaired === true,
+          forced: a?.foreign_parts_only === true,
+          season: a?.feature_details?.season_number ?? null,
+          episode: a?.feature_details?.episode_number ?? null
+        }
+      })
       .filter((c) => c.fileId > 0)
-      .sort(rankCandidates)
+    return rankOpenSubtitles(candidates, file)
   }
 
   /** Downloads a candidate next to the video and returns the written path. */
@@ -100,15 +128,22 @@ export class OpenSubtitlesClient {
     if (!response.ok) {
       throw new Error(`OpenSubtitles download failed: ${response.status}`)
     }
-    const body = (await response.json()) as { link?: string }
+    const body = (await response.json()) as { link?: string; file_name?: string }
     if (!body.link) throw new Error('OpenSubtitles returned no download link')
 
     const file = await fetch(body.link)
     if (!file.ok) throw new Error(`Subtitle fetch failed: ${file.status}`)
     const text = await file.text()
 
+    // Named the way SubDL downloads are, `.eng` rather than `.en`, and
+    // numbered rather than written over a subtitle already there.
     const stem = basename(videoPath, extname(videoPath))
-    const target = join(dirname(videoPath), `${stem}.${candidate.language}.srt`)
+    const lang = normaliseLanguage(candidate.language)
+    const suffix = candidate.hearingImpaired ? '.sdh' : ''
+    const extension = /^\.(srt|ass|ssa|vtt)$/i.test(extname(body.file_name ?? ''))
+      ? extname(body.file_name!).toLowerCase()
+      : '.srt'
+    const target = await freeName(dirname(videoPath), `${stem}.${lang}${suffix}`, extension)
     await writeFile(target, text, 'utf8')
     return target
   }
@@ -119,6 +154,70 @@ export function rankCandidates(a: SubtitleCandidate, b: SubtitleCandidate): numb
   if (a.fromTrusted !== b.fromTrusted) return a.fromTrusted ? -1 : 1
   return b.downloads - a.downloads
 }
+
+/**
+ * Best first, and nothing that is for something else.
+ *
+ * The same checks as SubDL's: an episode OpenSubtitles files under another
+ * season or episode, or whose file or release names another one outright,
+ * is not this episode, and a film named for another year is another film.
+ * Titles are not compared here — a release is often named only by its group
+ * — only what the name says about episode and year. A subtitle found by the
+ * video's own hash is made for this release, and goes first; then the
+ * episode OpenSubtitles files it under; then how much of the release name
+ * this file shares; then plain over hearing-impaired, trusted and popular.
+ */
+export function rankOpenSubtitles(
+  candidates: SubtitleCandidate[],
+  file: MediaFile
+): SubtitleCandidate[] {
+  const video = identifyVideo(file.path, file)
+  const first = file.episodes[0]
+  const hint = new Set(words(releaseHint(file.path)))
+  const shared = (c: SubtitleCandidate): number => {
+    const release = words(c.release)
+    return release.length === 0 ? 0 : release.filter((w) => hint.has(w)).length / release.length
+  }
+
+  const fits = (c: SubtitleCandidate): boolean => {
+    if (c.forced) return false
+    if (file.kind === 'series') {
+      if (c.season !== null && file.season !== null && c.season !== file.season) return false
+      if (c.episode !== null && first !== undefined && c.episode !== first) return false
+    }
+    let namesEpisode = false
+    for (const name of [c.fileName, c.release]) {
+      if (!name) continue
+      const identity = identifySubtitle(`${name.replace(/\.(srt|ass|ssa|vtt|sub)$/i, '')}.srt`)
+      if (scoreMatch({ ...identity, words: [] }, video) === null) return false
+      if (identity.readings.length > 0) namesEpisode = true
+    }
+    // For an episode, something has to say it is this one: OpenSubtitles'
+    // own filing, the name, or the video's hash. A result that says nothing
+    // at all could be any episode of the show.
+    if (file.kind === 'series' && !c.hashMatch && c.episode === null && !namesEpisode) {
+      return false
+    }
+    return true
+  }
+
+  return candidates.filter(fits).sort((a, b) => {
+    if (a.hashMatch !== b.hashMatch) return a.hashMatch ? -1 : 1
+    const aExact = a.episode !== null && a.episode === first
+    const bExact = b.episode !== null && b.episode === first
+    if (aExact !== bExact) return aExact ? -1 : 1
+    const byRelease = shared(b) - shared(a)
+    if (Math.abs(byRelease) > 0.001) return byRelease
+    if (a.hearingImpaired !== b.hearingImpaired) return a.hearingImpaired ? 1 : -1
+    return rankCandidates(a, b)
+  })
+}
+
+function words(value: string): string[] {
+  return value.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
+}
+
+
 
 /**
  * OpenSubtitles' hash: the file size plus the first and last 64 KiB, summed as

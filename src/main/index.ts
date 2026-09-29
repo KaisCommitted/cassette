@@ -5,15 +5,15 @@ import { describeKey } from './input/descriptors'
 import { BindingsStore } from './input/bindingsStore'
 import { GlobalHotkeyMachine } from './input/globalHotkey'
 import { startNativeHook } from './input/nativeHook'
-import { findNext, findPrevious, findSeasonOwner } from './library/playQueue'
+import { findNext, findPrevious } from './library/playQueue'
 import { NightLight } from './player/nightLight'
 import { SleepTimer } from './player/sleepTimer'
-import { applySeasonSubtitleChoice, chooseAudioTrack, chooseSubtitleTrack } from './player/trackChoice'
+import { chooseSubtitlesOnLoad } from './player/subtitlesOnLoad'
+import { chooseAudioTrack } from './player/trackChoice'
 import { killRunningProbes } from './library/mediaProbe'
 import {
   cancelScan,
   enrichInBackground,
-  loadExternalSubtitles,
   playItem,
   registerHandlers,
   stopPlayback,
@@ -553,30 +553,16 @@ async function bootstrap(): Promise<void> {
       const audio = chooseAudioTrack(state.tracks, config.preferredAudioLanguages)
       if (audio !== null) await mpv.setAudioTrack(audio)
 
-      // Subtitle files beside the video come first: they are extra candidates
-      // for the choice below, and picking before loading them would settle on
-      // an embedded track while a preferred-language file sat unused.
-      if (ctx) await loadExternalSubtitles(ctx, state.path!)
-
-      // Picking a subtitle by hand on one episode carries to the rest of its
-      // season — "the second option" rather than a particular track, which
-      // is per file. An episode with fewer options than that falls back to
-      // the ordinary default below, the same as a season with no choice yet.
-      const owner =
-        ctx?.library && ctx.currentKey ? findSeasonOwner(ctx.library, ctx.currentKey) : null
-      const remembered = owner ? ctx?.subtitleChoices.get(owner.seriesId, owner.season) : undefined
-      const subsInMenuOrder = mpv.getState().tracks.filter((t) => t.type === 'sub')
-      const override = applySeasonSubtitleChoice(subsInMenuOrder, remembered)
-
-      const subtitle =
-        override !== undefined
-          ? override
-          : chooseSubtitleTrack(
-              mpv.getState().tracks,
-              config.preferredSubtitleLanguages,
-              config.autoEnableSubtitles
-            )
-      if (subtitle !== null) await mpv.setSubtitleTrack(subtitle)
+      await chooseSubtitlesOnLoad(
+        {
+          mpv,
+          library: ctx?.library ?? null,
+          currentKey: ctx?.currentKey ?? null,
+          subtitleChoices: ctx?.subtitleChoices ?? null
+        },
+        state.path!,
+        config
+      )
     })().catch((error: Error) => {
       console.error(`[cassette] track selection failed:`, error.message)
     })

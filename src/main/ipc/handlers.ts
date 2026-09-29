@@ -10,8 +10,11 @@ import { scanLibrary } from '../library/scanner'
 import { findNext, findPrevious, findSeasonOwner, type PlayableItem } from '../library/playQueue'
 import { resumeTarget } from '../library/resume'
 import { findLocalSubtitles } from '../subs/localSubtitles'
+import { clearArchiveCache } from '../subs/subdl'
+import { libraryEntryOrPath, loadExternalSubtitles } from '../player/subtitlesOnLoad'
 import { scanForSubtitles, scanOne, type ScanScope } from '../subs/subtitleScan'
 import type { SleepTimer } from '../player/sleepTimer'
+import { describeSubtitlePick } from '../player/trackChoice'
 import { libraryFile } from '../state/paths'
 import { bundledKeyAvailability, withBundledKeys } from '../state/bundledKeys'
 import { readJson, writeJsonAtomic } from '../state/atomicJson'
@@ -145,8 +148,9 @@ async function closePlayer(ctx: AppContext): Promise<void> {
 }
 
 /**
- * Remembers a subtitle picked by hand as a position in the menu, against
- * whichever series and season the playing episode belongs to.
+ * Remembers a subtitle picked by hand — by its language and kind, not its
+ * track id — against whichever series and season the playing episode
+ * belongs to.
  *
  * Only a person choosing counts — the automatic pick made when a file opens
  * (index.ts) never calls this, or it would overwrite the very thing it is
@@ -162,9 +166,9 @@ async function rememberSubtitleChoice(ctx: AppContext, id: number | null): Promi
     return
   }
   const subs = ctx.mpv.getState().tracks.filter((t) => t.type === 'sub')
-  const index = subs.findIndex((t) => t.id === id)
-  if (index === -1) return // not one of this episode's own subtitle tracks
-  await ctx.subtitleChoices.set(owner.seriesId, owner.season, index)
+  const pick = describeSubtitlePick(subs, id)
+  if (!pick) return // not one of this episode's own subtitle tracks
+  await ctx.subtitleChoices.set(owner.seriesId, owner.season, pick)
 }
 
 /** How long the picture takes to dip to black before the window changes size. */
@@ -412,7 +416,7 @@ export function registerHandlers(ctx: AppContext): void {
 
   handle(IPC.listLocalSubtitles, async () => {
     const path = ctx.mpv.getState().path
-    return path ? findLocalSubtitles(path) : []
+    return path ? findLocalSubtitles(libraryEntryOrPath(ctx.library, path)) : []
   })
 
   handle(IPC.useSubtitleFile, (path: string) => ctx.mpv.addSubtitleFile(path))
@@ -453,7 +457,9 @@ export function registerHandlers(ctx: AppContext): void {
       withBundledKeys(ctx.settings.get()),
       null,
       { force: true, ...options }
-    )
+    ).finally(clearArchiveCache)
+    // Loaded into the file it was asked for only: if the player has moved on
+    // since, these belong to one that is no longer playing.
     await loadExternalSubtitles(ctx, path)
     return result
   })
@@ -501,31 +507,6 @@ export function registerHandlers(ctx: AppContext): void {
     if (ctx.overlayWindow.isDestroyed()) return
     ctx.overlayWindow.setIgnoreMouseEvents(!interactive)
   })
-}
-
-/**
- * Adds every subtitle file beside the video that mpv is not already showing.
- *
- * mpv picks up siblings named after the video on its own, but not ones in a
- * `Subs` folder, and not files that appear after it opened. Adding them
- * without selecting anything leaves the track that was chosen for the user's
- * preferred language switched on.
- */
-export async function loadExternalSubtitles(ctx: AppContext, path: string): Promise<number> {
-  const already = ctx.mpv.loadedSubtitlePaths()
-  const found = await findLocalSubtitles(path)
-  let added = 0
-  for (const sub of found) {
-    if (already.has(sub.path.toLowerCase())) continue
-    try {
-      await ctx.mpv.addSubtitleFile(sub.path, sub.label, sub.lang)
-      added++
-    } catch {
-      // A subtitle mpv refuses to parse should not stop the others loading.
-    }
-  }
-  if (added > 0) await ctx.mpv.refreshTracks()
-  return added
 }
 
 /** The library entry for a path, with the label the scan report should use. */

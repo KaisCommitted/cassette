@@ -73,7 +73,10 @@ export async function startMpv(hwnd: Buffer, legacyCompositing = true): Promise<
       '--input-cursor=no',
       '--osc=no',
       '--no-osd-bar',
-      '--sub-auto=fuzzy',
+      // Subtitle files are chosen by the app (findLocalSubtitles) and added
+      // once a file loads. mpv's own fuzzy loading takes any file whose name
+      // contains the video's, which gives `Show E1` episode ten's as well.
+      '--sub-auto=no',
       ...testArgs(),
       ...(process.env.CASSETTE_MPV_LOG === '1'
         ? ['--msg-level=all=v', `--log-file=${process.env.TEMP}\\cassette-mpv.log`]

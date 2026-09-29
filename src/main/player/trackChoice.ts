@@ -1,4 +1,5 @@
 import type { TrackInfo } from '@shared/types'
+import { flavourOfTitle, normaliseLanguage, type Flavour } from '../subs/language'
 
 /**
  * Picks which subtitle and audio tracks to turn on when a file loads.
@@ -8,26 +9,13 @@ import type { TrackInfo } from '@shared/types'
  * tags the file already carries means embedded subtitles simply come on.
  */
 
+/**
+ * Files use both two- and three-letter codes, sometimes with a region, and
+ * a track inside the video (`it`, `nld`) is compared with a file beside it
+ * (`ita`, `dut`), so both go through the one table the subtitle code uses.
+ */
 function normaliseLang(lang: string | null): string {
-  if (!lang) return ''
-  const value = lang.toLowerCase().trim()
-  // Files use both two- and three-letter codes, sometimes with a region.
-  const base = value.split(/[-_]/)[0] ?? value
-  const aliases: Record<string, string> = {
-    en: 'eng',
-    english: 'eng',
-    fr: 'fre',
-    fra: 'fre',
-    french: 'fre',
-    ar: 'ara',
-    arabic: 'ara',
-    es: 'spa',
-    spanish: 'spa',
-    de: 'ger',
-    deu: 'ger',
-    german: 'ger'
-  }
-  return aliases[base] ?? base
+  return lang ? normaliseLanguage(lang) : ''
 }
 
 function rank(track: TrackInfo, preferences: string[]): number {
@@ -73,20 +61,55 @@ export function chooseSubtitleTrack(
 }
 
 /**
- * A season's remembered subtitle pick, as a position in the menu rather than
- * a track id: track ids are particular to one file, but "the second option"
- * is a choice that carries across a season. `null` means off.
+ * A subtitle picked by hand, described by what it is rather than by its
+ * track id, which is particular to one file.
+ *
+ * Its position in the menu is kept too, but only to settle a tie between two
+ * alike tracks: on its own, "the second option" is English in one episode and
+ * French in the next, as soon as one episode has a subtitle file the other
+ * lacks or carries its embedded tracks in another order.
  */
-export type SubtitleChoice = number | null
+export interface SubtitlePick {
+  index: number
+  lang: string | null
+  /** A file beside the video rather than a track inside it. */
+  external: boolean
+  flavour: Flavour
+}
+
+/** A season's remembered subtitle pick. `null` means off. */
+export type SubtitleChoice = SubtitlePick | null
+
+/** Describes one of an episode's subtitle tracks, to remember it by. */
+export function describeSubtitlePick(
+  subsInMenuOrder: TrackInfo[],
+  id: number
+): SubtitlePick | undefined {
+  const index = subsInMenuOrder.findIndex((t) => t.id === id)
+  const track = subsInMenuOrder[index]
+  if (!track) return undefined
+  return {
+    index,
+    lang: track.lang ? normaliseLang(track.lang) : null,
+    external: track.externalFilename !== null,
+    flavour: flavourOfTitle(track.title)
+  }
+}
 
 /**
  * Applies a season's remembered choice to one episode's own subtitle list,
  * in the order the menu shows them (TrackMenu.tsx, ControlBar's `subs`).
  *
+ * The track taken is one that is the same kind of subtitle as the one picked:
+ * the same language and flavour (full, SDH or forced), from the same place if
+ * this episode has one there — a file, or inside the video — and otherwise
+ * from the other. Where several are alike, the one at the remembered position
+ * wins.
+ *
  * `undefined` means there is nothing to apply — no choice saved for this
- * season, or this episode has fewer options than the position asked for —
- * and the caller should fall back to {@link chooseSubtitleTrack}'s own
- * default instead of guessing.
+ * season, or no track in this episode like the one picked — and the caller
+ * should fall back to {@link chooseSubtitleTrack}'s own default instead of
+ * guessing.
  */
 export function applySeasonSubtitleChoice(
   subsInMenuOrder: TrackInfo[],
@@ -94,7 +117,18 @@ export function applySeasonSubtitleChoice(
 ): number | null | undefined {
   if (choice === undefined) return undefined
   if (choice === null) return null
-  return subsInMenuOrder[choice]?.id
+
+  const alike = (track: TrackInfo, sameSource: boolean): boolean =>
+    normaliseLang(track.lang) === normaliseLang(choice.lang) &&
+    flavourOfTitle(track.title) === choice.flavour &&
+    (!sameSource || (track.externalFilename !== null) === choice.external)
+
+  const atPosition = subsInMenuOrder[choice.index]
+  if (atPosition && alike(atPosition, true)) return atPosition.id
+  return (
+    subsInMenuOrder.find((t) => alike(t, true))?.id ??
+    subsInMenuOrder.find((t) => alike(t, false))?.id
+  )
 }
 
 export function chooseAudioTrack(

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { TrackInfo } from '@shared/types'
-import { applySeasonSubtitleChoice, chooseAudioTrack, chooseSubtitleTrack } from './trackChoice'
+import {
+  applySeasonSubtitleChoice,
+  chooseAudioTrack,
+  chooseSubtitleTrack,
+  describeSubtitlePick,
+  type SubtitlePick
+} from './trackChoice'
 
 function track(over: Partial<TrackInfo> & { id: number; type: TrackInfo['type'] }): TrackInfo {
   return { title: null, lang: null, codec: null, selected: false, externalFilename: null, ...over }
@@ -107,24 +113,80 @@ describe('chooseAudioTrack', () => {
 })
 
 describe('applySeasonSubtitleChoice', () => {
-  const subs = [
-    track({ id: 10, type: 'sub', lang: 'eng', title: 'English (SDH)' }),
-    track({ id: 11, type: 'sub', lang: 'eng', title: 'English · file' })
-  ]
-
-  it('has nothing to apply when the season has no remembered choice', () => {
-    expect(applySeasonSubtitleChoice(subs, undefined)).toBeUndefined()
+  const embeddedSdh = track({ id: 10, type: 'sub', lang: 'eng', title: 'English (SDH)' })
+  const embedded = track({ id: 11, type: 'sub', lang: 'eng', title: 'English' })
+  const file = track({
+    id: 12, type: 'sub', lang: 'eng', title: 'English (file)',
+    externalFilename: 'C:\\Show S01E01.eng.srt'
+  })
+  const french = track({
+    id: 13, type: 'sub', lang: 'fre', title: 'French (file)',
+    externalFilename: 'C:\\Show S01E02.fre.srt'
+  })
+  const pick = (over: Partial<SubtitlePick>): SubtitlePick => ({
+    index: 0, lang: 'eng', external: false, flavour: 'full', ...over
   })
 
-  it('picks the track at the remembered position', () => {
-    expect(applySeasonSubtitleChoice(subs, 1)).toBe(11)
+  it('has nothing to apply when the season has no remembered choice', () => {
+    expect(applySeasonSubtitleChoice([embedded], undefined)).toBeUndefined()
   })
 
   it('turns subtitles off when that was the remembered choice', () => {
-    expect(applySeasonSubtitleChoice(subs, null)).toBeNull()
+    expect(applySeasonSubtitleChoice([embedded], null)).toBeNull()
   })
 
-  it('has nothing to apply when this episode has fewer options than that', () => {
-    expect(applySeasonSubtitleChoice([subs[0]!], 1)).toBeUndefined()
+  it('picks the track at the remembered position when it is the same kind', () => {
+    expect(applySeasonSubtitleChoice([embeddedSdh, embedded], pick({ index: 1 }))).toBe(11)
+  })
+
+  it('does not take a different subtitle just because the position lines up', () => {
+    // Picked: English at position 1. Here position 1 is French.
+    const chosen = applySeasonSubtitleChoice([embedded, french], pick({ index: 1, external: false }))
+    expect(chosen).toBe(11)
+    // Picked: full English. Position 0 is now SDH; the full track moved.
+    expect(applySeasonSubtitleChoice([embeddedSdh, embedded], pick({ index: 0 }))).toBe(11)
+  })
+
+  it('finds the same kind of subtitle from the same place first', () => {
+    expect(
+      applySeasonSubtitleChoice([embedded, file], pick({ index: 0, external: true }))
+    ).toBe(12)
+  })
+
+  it('falls back to the same language from the other place', () => {
+    expect(applySeasonSubtitleChoice([file], pick({ index: 0, external: false }))).toBe(12)
+  })
+
+  it('knows a track and a file name the same language however each spells it', () => {
+    // mkv tracks say `it` and `nld`; subtitle files say `ita` and `dut`.
+    const italian = track({ id: 20, type: 'sub', lang: 'it', title: 'Italiano' })
+    const dutch = track({ id: 21, type: 'sub', lang: 'nld', title: 'Nederlands' })
+    expect(applySeasonSubtitleChoice([italian], pick({ lang: 'ita', external: true }))).toBe(20)
+    expect(applySeasonSubtitleChoice([dutch], pick({ lang: 'dut', external: true }))).toBe(21)
+    expect(chooseSubtitleTrack([dutch, italian], ['ita'], true)).toBe(20)
+  })
+
+  it('has nothing to apply when no track is like the one picked', () => {
+    expect(applySeasonSubtitleChoice([french], pick({ index: 0 }))).toBeUndefined()
+    expect(applySeasonSubtitleChoice([embeddedSdh], pick({ index: 0 }))).toBeUndefined()
+  })
+})
+
+describe('describeSubtitlePick', () => {
+  it('records what a track is, and where it sat', () => {
+    const subs = [
+      track({ id: 3, type: 'sub', lang: 'en', title: 'English (SDH)' }),
+      track({
+        id: 4, type: 'sub', lang: 'fre', title: 'French forced (file)',
+        externalFilename: 'C:\\x.fre.forced.srt'
+      })
+    ]
+    expect(describeSubtitlePick(subs, 3)).toEqual({
+      index: 0, lang: 'eng', external: false, flavour: 'sdh'
+    })
+    expect(describeSubtitlePick(subs, 4)).toEqual({
+      index: 1, lang: 'fre', external: true, flavour: 'forced'
+    })
+    expect(describeSubtitlePick(subs, 99)).toBeUndefined()
   })
 })

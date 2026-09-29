@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { mpvBinaryPath } from '../mpv/mpvProcess'
-import { languageName } from './localSubtitles'
+import { languageName } from './language'
 
 export interface EmbeddedSubtitle {
   id: number

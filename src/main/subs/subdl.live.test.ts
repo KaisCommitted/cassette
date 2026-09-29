@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { extractFirstSubtitle, rankSubdl, SubdlClient } from './subdl'
-import { guessLanguage } from './localSubtitles'
-import type { ParsedMedia } from '@shared/types'
+import type { MediaFile } from '@shared/types'
+import { rankSubdl, SubdlClient } from './subdl'
+import { guessLanguage } from './language'
 
 /**
  * Talks to SubDL for real.
@@ -19,67 +19,69 @@ import type { ParsedMedia } from '@shared/types'
 const apiKey = process.env.SUBDL_API_KEY
 const live = apiKey ? describe : describe.skip
 
-const episode: ParsedMedia = {
-  title: 'The Mentalist',
-  year: null,
-  season: 3,
-  episodes: [16],
-  kind: 'series',
-  tags: []
+function episode(folder: string, name: string, season: number, number: number): MediaFile {
+  const path = join(folder, name)
+  return {
+    path, sizeBytes: 0, key: path, title: 'The Mentalist', year: 2008,
+    season, episodes: [number], kind: 'series', tags: []
+  }
 }
 
 live('SubDL, against the live service', () => {
-  it('finds subtitles for an episode', async () => {
+  it('finds subtitles for an episode, with what each one covers', async () => {
     const client = new SubdlClient(apiKey!)
-    const candidates = await client.search(episode, ['eng', 'fre'])
+    const file = episode('C:\\', 'The.Mentalist.S03E16.720p.HDTV.x264.mkv', 3, 16)
+    const candidates = await client.search(file, ['eng', 'fre'])
 
     expect(candidates.length).toBeGreaterThan(0)
     expect(candidates.every((c) => c.url.length > 0)).toBe(true)
-    // Both requested languages should be represented, which is what makes
-    // filling in one track per language possible from a single request.
-    const languages = new Set(candidates.map((c) => c.language))
-    expect(languages.has('eng')).toBe(true)
+    expect(new Set(candidates.map((c) => c.language)).has('eng')).toBe(true)
+    // Season packs come back mixed in; they must be told apart.
+    expect(candidates.some((c) => c.episodeFrom === 16 && c.episodeTo === 16)).toBe(true)
   }, 30000)
 
-  it('writes a subtitle beside the video, named by language', async () => {
+  it('writes a subtitle beside the video, named by language, without replacing one', async () => {
     const folder = await mkdtemp(join(tmpdir(), 'cassette-subs-'))
-    const video = join(folder, 'The.Mentalist.S03E16.720p.HDTV.x264.mkv')
-    await writeFile(video, '')
+    const file = episode(folder, 'The.Mentalist.S03E16.720p.HDTV.x264.mkv', 3, 16)
+    await writeFile(file.path, '')
 
     const client = new SubdlClient(apiKey!)
-    const candidates = rankSubdl(await client.search(episode, ['eng']), video)
-    const best = candidates.find((c) => c.language === 'eng')!
+    const best = rankSubdl(await client.search(file, ['eng']), file).find((c) => c.language === 'eng')!
 
-    const first = await client.download(best, video)
-    expect(basename(first)).toBe('The.Mentalist.S03E16.720p.HDTV.x264.eng.srt')
-
-    // A second subtitle in a language already downloaded must not replace it.
-    const second = await client.download(best, video)
-    expect(basename(second)).toBe('The.Mentalist.S03E16.720p.HDTV.x264.eng.2.srt')
-
-    // The language in the name is what the scanner reads back to decide the
-    // language is already covered, and what mpv labels the track with.
-    expect(guessLanguage(basename(first))).toBe('eng')
+    const first = await client.download(best, file)
+    expect(first).not.toBeNull()
+    expect(basename(first!)).toMatch(/^The\.Mentalist\.S03E16\.720p\.HDTV\.x264\.eng(\.sdh)?\.srt$/)
+    const second = await client.download(best, file)
+    expect(second).not.toBe(first)
+    expect(guessLanguage(basename(first!))).toBe('eng')
 
     await rm(folder, { recursive: true, force: true })
   }, 30000)
 
-  it('downloads an archive this app can read', async () => {
+  /**
+   * The bug this was written for: every episode of a season got the same
+   * file, the first one out of a season pack.
+   */
+  it('gives each episode of a season its own subtitle', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cassette-subs-'))
+    const folder = join(root, 'The Mentalist 2008 Season 6 Complete 720p AMZN WEBRip x264 [i_c]')
+    await mkdir(folder)
     const client = new SubdlClient(apiKey!)
-    const candidates = rankSubdl(
-      await client.search(episode, ['eng']),
-      'The.Mentalist.S03E16.720p.HDTV.x264.mkv'
-    )
-    const best = candidates.find((c) => c.language === 'eng')
-    expect(best).toBeDefined()
 
-    const response = await fetch('https://dl.subdl.com' + best!.url)
-    expect(response.ok).toBe(true)
+    const texts: string[] = []
+    for (const [n, name] of [[18, 'Forest Green'], [19, 'Brown Eyed Girls']] as const) {
+      const file = episode(folder, `The Mentalist S06E${n} ${name}.mkv`, 6, n)
+      await writeFile(file.path, '')
+      let written: string | null = null
+      for (const candidate of rankSubdl(await client.search(file, ['eng']), file).slice(0, 5)) {
+        written = await client.download(candidate, file)
+        if (written) break
+      }
+      expect(written).not.toBeNull()
+      texts.push(await readFile(written!, 'utf8'))
+    }
+    expect(texts[0]).not.toBe(texts[1])
 
-    const entry = extractFirstSubtitle(Buffer.from(await response.arrayBuffer()))
-    expect(entry).not.toBeNull()
-    // Subtitle files start with a cue number or an ASS script header; anything
-    // else means we pulled out the wrong thing or failed to decompress it.
-    expect(entry!.contents.toString('utf8').trim().length).toBeGreaterThan(50)
-  }, 30000)
+    await rm(root, { recursive: true, force: true })
+  }, 60000)
 })
